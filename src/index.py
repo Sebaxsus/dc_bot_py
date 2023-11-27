@@ -1,9 +1,11 @@
 import discord
 from discord.ext import commands
 
-#
+
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
+intents.all()
 
 client = discord.Client(intents=intents)
 
@@ -13,19 +15,19 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    if message.author == client.user:
+    if message.author.id == client.user.id:
         return
 
     if message.content.startswith('$hello'):
         await message.channel.send('Hello!')
     
-    if message.content.startswith('blue'):
-        await message.channel.send(f'@bluyesssir masca pito')
+    if message.content.startswith('yo'):
+        await message.channel.send('Sapa ', mention_author=True)
 
 @client.event
 async def on_message(message):
     if message.content.startswith('!canal'):
-        await message.channel.send(f"{discord.User(str('bluyesssir'))}es puto")
+        await message.channel.send(f"es puto")
 
 client.run('MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc')
 
