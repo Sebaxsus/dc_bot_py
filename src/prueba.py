@@ -1,6 +1,16 @@
 import discord 
 from discord.ext import commands
 
+import datetime
+
+from urllib import parse, request
+import re
+import json
+import os
+from youtube_dl import YoutubeDL
+
+#El intents es indispensable, Se usa para que el bot y la libreria obtenga informacion de
+#La api de discord con permisos, Los permiosos son los intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -57,5 +67,13 @@ async def ping(ctx, *, nombre):
     await ctx.send(f'Pong {tempUserObject.mention}') #con los objetos Puedo mencionar, sacarle la info del objeto (User)
     print(elBulloso.user.mention)
     print(f'Inicializando como {elBulloso.user}')
+
+@elBulloso.command() #No encuentra nada / No sirve \_(._.)_/
+async def play1_NoSirve(ctx, *, search):
+    link = parse.urlencode({'search_query': search})
+    html_content = request.urlopen('http://www.youtube.com/results?' + link)
+    search_result = re.findall('href=\"\\/watch\\?=(.{11})', html_content.read().decode())
+    print(search_result)
+    await ctx.send('https://www.youtube.com/watch?v=' + search_result[0]) 
 
 elBulloso.run('MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc')

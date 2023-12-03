@@ -40,22 +40,21 @@ FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconne
 #El discord.utils.find solo busca los nombres exactos sin alias el nombre de discord
 @elBulloso.command()
 async def ping(ctx, *, nombre):
-    user = discord.utils.find(lambda m: m.name == nombre, ctx.channel.guild.members)
-    tempUserId = None
-    tempUserName = None
-    tempUserObject = None
-    print(user, nombre, ctx.channel.guild.members)
-    for m in ctx.channel.guild.members:
-        if user in m.name:
-            print(m.id, nombre)
-            tempUserId = m.id
-            tempUserName = m.name
-            tempUserObject = m
-            print("encontrado")  
-    print("Separador \n")
-    #print(discord.Guild.get_member_named(ctx.guild.id, str(nombre)))
-    print(discord.Guild.members)
-    await ctx.send(f'Pong {tempUserObject.mention}') #con los objetos Puedo mencionar, sacarle la info del objeto (User)
+    try:
+        user = discord.utils.find(lambda m: m.name == nombre, ctx.channel.guild.members)
+        #tempUserId = None
+        #tempUserName = None
+        tempUserObject = None
+    except:
+        ctx.send("Usuario No encontrado")
+    else:
+        for m in ctx.channel.guild.members:
+            if user in m.name: #busco el usario dentro de todos los usuarios de la guild
+                #print(m.id, nombre)
+                #tempUserId = m.id
+                #tempUserName = m.name
+                tempUserObject = m
+        await ctx.send(f'Pong {tempUserObject.mention}') #con los objetos Puedo mencionar, sacarle la info del objeto (User)
 
 @elBulloso.command()
 async def info(ctx):
@@ -67,14 +66,7 @@ async def info(ctx):
     ambed.set_author(name="sebaxsus")
     await ctx.send(embed=ambed)
 
-@elBulloso.command() #No encuentra nada / No sirve \_(._.)_/
-async def play1_NoSirve(ctx, *, search):
-    link = parse.urlencode({'search_query': search})
-    html_content = request.urlopen('http://www.youtube.com/results?' + link)
-    search_result = re.findall('href=\"\\/watch\\?=(.{11})', html_content.read().decode())
-    print(search_result)
-    await ctx.send('https://www.youtube.com/watch?v=' + search_result[0]) 
-
+#Comando para conectar / Mover el bot a un canal de voz
 @elBulloso.command()
 async def unirse(ctx, channel):
     idGuild = int(ctx.guild.id)
@@ -86,7 +78,8 @@ async def unirse(ctx, channel):
             return
         else:
             await isInVc.move_to(channel)
-#Prueba
+
+#Comando que lee el mensaje y busca eso mismo en youtube
 @elBulloso.command()
 async def play(ctx, *,search):
     buscar = parse.urlencode({'search_query': search})#                                                                              <<<---   (search_query=search)
