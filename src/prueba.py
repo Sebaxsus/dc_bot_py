@@ -16,6 +16,22 @@ intents.message_content = True
 intents.members = True
 intents.all()
 
+#Diccionarios para almacenar la id de la Guild (Server) y el status actual del bot
+isPlaying = {}
+
+isPaused = {}
+
+queue = {}
+#Diccionario con id de la Guild (Server) y cuantas canciones estan en cola
+queueIndex = {}
+#Diccionario con id de la Guild y el status de si esta conectado a un canal de voz o no
+isInVc = {}
+
+#Constant for ytdl_Youtube and FFMPEG
+
+YTDL_OPTIONS = {'format': 'bestaudio', 'nonplaylist': 'True'}
+FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+
 
 
 elBulloso = commands.Bot(command_prefix='$', description="Prueba", intents=intents)
@@ -75,5 +91,19 @@ async def play1_NoSirve(ctx, *, search):
     search_result = re.findall('href=\"\\/watch\\?=(.{11})', html_content.read().decode())
     print(search_result)
     await ctx.send('https://www.youtube.com/watch?v=' + search_result[0]) 
+
+async def unirse(ctx):
+    idGuild = int(ctx.guild.id)
+    channel = ctx.author.voice.channel
+    #if(channel == None):
+        #channel = ctx.author.voice.channel
+    if isInVc[idGuild] == None or not isInVc[idGuild].is_connected():
+        isInVc[idGuild] = await channel.connect()
+
+        if isInVc[idGuild] == None:
+            await ctx.send("No me pude conectar al canal de voz")
+            return
+    else:
+        await isInVc[idGuild].move_to(channel)
 
 elBulloso.run('MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc')
