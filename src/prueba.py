@@ -1,5 +1,9 @@
 import discord 
 from discord.ext import commands
+import pyaudio, io, sys, pydub, pytube
+import numpy as np
+import wave
+import os
 
 import datetime
 
@@ -7,7 +11,10 @@ from urllib import parse, request
 import re
 import json
 import os
-from youtube_dl import YoutubeDL
+#from youtube_dl import YoutubeDL
+import asyncio
+from yt_dlp import YoutubeDL
+from youtubesearchpython import VideosSearch
 
 #El intents es indispensable, Se usa para que el bot y la libreria obtenga informacion de
 #La api de discord con permisos, Los permiosos son los intents
@@ -35,6 +42,32 @@ FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconne
 
 
 elBulloso = commands.Bot(command_prefix='$', description="Prueba", intents=intents)
+
+def getStream(url):
+
+    #Crea un buffer
+    buffer = io.BytesIO()
+    #Con la libreria Pytube crea un objeto de la url de yotube
+    yt = pytube.YouTube(url)
+
+    #Obtengo el stream (DASH) y lo filtro para solo obtener el audio y obtener el primer resultado
+    audio_stream = yt.streams.filter(only_audio=True).first()
+    
+    #Con la libreria io methodo BytesIo que me escribe el stream en el buffer
+    audio_data = io.BytesIO(audio_stream.stream_to_buffer(buffer))
+
+    #Inicializo el buffer, Por que ni idea
+    buffer.seek(0)
+
+    #audio = pydub.AudioSegment.from_file(buffer, format="mp4")
+
+    #audio_source = discord.AudioSource.read(audio)
+
+    #print("audio source type: ", audio_source)
+
+
+    #Mando el buffer en formato BufferedIOBase
+    return buffer
 
 @elBulloso.command()
 async def ping(ctx, *, nombre):
@@ -92,18 +125,93 @@ async def play1_NoSirve(ctx, *, search):
     print(search_result)
     await ctx.send('https://www.youtube.com/watch?v=' + search_result[0]) 
 
+@elBulloso.command()
 async def unirse(ctx):
     idGuild = int(ctx.guild.id)
     channel = ctx.author.voice.channel
-    #if(channel == None):
-        #channel = ctx.author.voice.channel
+    if(channel == None):
+        channel = ctx.author.voice.channel
     if isInVc[idGuild] == None or not isInVc[idGuild].is_connected():
         isInVc[idGuild] = await channel.connect()
-
+        await ctx.send(embed=discord.Embed(
+            title=f"Conectado a {ctx.author.voice.channel}",
+            description=f"Peticion de union hecha por {ctx.author.mention}",
+            colour=0x0eaa51
+        ))
         if isInVc[idGuild] == None:
             await ctx.send("No me pude conectar al canal de voz")
             return
     else:
         await isInVc[idGuild].move_to(channel)
+
+def extraerCancion(url):
+    with YoutubeDL(YTDL_OPTIONS) as ydl:
+        try:
+            raw = ydl.extract_info(url, download=False)["title"]
+        except:
+            return False
+    return {
+        'link':'https://www.youtube.com/results?' + url,
+        'Miniatura': 'https://i.ytimg.com/vi/' + url + '/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig',
+        'Source': raw['url'],
+        'Titulo': raw['title']
+    }
+
+@elBulloso.command(
+        name="prueba",
+        aliases=["h"],
+        help="Comando temporal para probar las funcionalidades que ese estan desarrollando."
+)
+async def prueba(ctx, *args):
+    search = " ".join(args)
+    idGuild = int(ctx.guild.id)
+    try:
+        channel = ctx.author.voice.channel
+        await conectarse(ctx, channel)
+    except:
+        em = discord.Embed(
+            title=f"No me pude conectar {ctx.author.mention}",
+            description=f"Para conectarme debe estar en un canal de voz",
+            colour=0xdf1141
+        )
+        em.set_footer(icon_url=elBulloso.user.display_avatar)
+        await ctx.send(embed=em)
+        return
+    if not args:
+        if len(queue[idGuild]) == 0:
+            await ctx.send("No hay canciones en la cola")
+            return
+        elif not isPlaying[idGuild]:
+            if queue[idGuild] == None or isInVc[idGuild] == None:
+                isPlaying[idGuild] = False
+                await reproducir(ctx)
+            else:
+                isPaused[idGuild] = False
+                isPlaying[idGuild] = True
+                isInVc[idGuild].resume()
+        else:
+            return
+    else:
+        cancion = extraerCancion(buscar(search)[0])
+        if type(cancion) == type(True):
+            await ctx.send(f"Que mierda buscate sapa {ctx.author.mention}")
+        else:
+            queue[idGuild].append([cancion, channel])
+
+            if not isPlaying[idGuild]:
+                await reproducir(ctx)
+            else:
+                await ctx.send(f"Agregado a la cola de reproduccion")
+        #queue[idGuild].append([{
+        #'link':'https://www.youtube.com/watch?v=yetGML1gWow&list=PLq4RAMp8kLaKvtCnHxEErokU5Kb--fmai&index=1&pp=gAQBiAQB',
+        #'Miniatura': 'C:/Users/sebax/OneDrive/Imágenes/Sadgi.JPG',
+        #'Source': 'C:/Users/sebax/Music/Triste.mp3',
+        #'Titulo': 'Triste'
+    #}, channel])
+
+        #if not isPlaying[idGuild]:
+            #await reproducir(ctx)
+        #else:
+            #await ctx.send(f"Agregado a la cola de reproduccion")
 
 elBulloso.run('MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc')
