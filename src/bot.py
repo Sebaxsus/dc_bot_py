@@ -59,6 +59,35 @@ FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconne
 def endSong(path):
     os.remove(path)
 
+def esPlaylistYT(texto):
+    tmp = False
+    texto = texto.split()
+    for i in texto:
+        if i.startswith("https://www.youtube.com/playlist?list="):
+            #print(i, " ", tmp)
+            texto = i
+            tmp = True
+            break
+    return {
+        'bool' : tmp,
+        'url' : texto
+        }
+
+async def agregarPlaylistYT(ctx, url, channel):
+    cancion = None
+    playlistYT = pytube.Playlist(url)
+    idGuild = int(ctx.guild.id)
+    for audio in playlistYT.video_urls:
+        cancion = getStream(audio)
+        queue[idGuild].append([cancion, channel])
+
+        if not isPlaying[idGuild]:
+            await reproducir(ctx)
+        else:
+            await ctx.send(embed=embed_Añadido_Queue(ctx, cancion))
+    return cancion
+
+
 def esUrl(texto):
     tmp = False
     texto = texto.split()
@@ -67,6 +96,7 @@ def esUrl(texto):
             tmp = True
     return tmp
 
+#Funcion para extraer el audio/cancion de el resultado de busqueda en $play
 def getStream(url):
 
     #Crea un buffer
@@ -91,7 +121,23 @@ def getStream(url):
 
 
     #Mando el buffer en formato BufferedIOBase
-    return buffer
+    Minutos = int(yt.length / 60)
+    Segundos = yt.length % 60
+    if Segundos < 10:
+        Segundos = '0'+str(Segundos)
+    return {
+        'buffer': buffer,
+        'link': url,
+        'Miniatura': yt.thumbnail_url,
+        'Source': url,
+        'Titulo': yt.title,
+        'Canal' : yt.author,
+        'Duracion' : f"{Minutos}:{Segundos}"
+    }
+
+#funcion que lee el mensaje y busca eso mismo en youtube
+def buscar(search):
+    return "https://www.youtube.com/watch?v=" + pytube.Search(search).results[0].video_id
 
 #Funcion para extraer el audio/cancion de el resultado de busqueda en $play
 def extraerCancion(url):
@@ -104,6 +150,7 @@ def extraerCancion(url):
             return False
     search = VideosSearch(url, limit= 1)
     #print(search.result())
+    #print(search.result()["result"][0]["channel"]["name"], " Espacio ", search.result()["result"][0]["accessibility"]["duration"])
     #print("\nSeparador\n")
     #print(search.result()["result"][0])
     #print("\nSeparador\n")
@@ -112,21 +159,26 @@ def extraerCancion(url):
         'link': url,
         'Miniatura': 'https://i.ytimg.com/vi/' + codeUrl + '/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig',
         'Source': search.result()["result"][0]["link"],
-        'Titulo': search.result()["result"][0]["title"]
+        'Titulo': search.result()["result"][0]["title"],
+        'Canal' : search.result()["result"][0]["channel"]["name"],
+        'Duracion' : search.result()["result"][0]["duration"]
     }
 
 #funcion que lee el mensaje y busca eso mismo en youtube
-def buscar(search):
-    buscar = parse.urlencode({'search_query': search})#                                                                              <<<---   (search_query=search)
-    htmlContent = request.urlopen('https://www.youtube.com/results?' + buscar)#htmlContent = request.urlopen('https://www.youtube.com/results?' + buscar)
-    resultadosBusqueda = re.findall('/watch\?v=(.{11})', htmlContent.read().decode())
+#def buscar(search):
+    #buscar = parse.urlencode({'search_query': search})#                                                                              <<<---   (search_query=search)
+    #htmlContent = request.urlopen('https://www.youtube.com/results?' + buscar)#htmlContent = request.urlopen('https://www.youtube.com/results?' + buscar)
+    #resultadosBusqueda = re.findall('/watch\?v=(.{11})', htmlContent.read().decode())
     #print(f"Resultados Busqueda: https://www.youtube.com/results?{buscar} \n")
     #print(resultadosBusqueda[0:5])
-    return resultadosBusqueda[0:2]
+    #return resultadosBusqueda[0:2]
 
 
 #El discord.utils.find solo busca los nombres exactos sin alias el nombre de discord
-@elBulloso.command()
+@elBulloso.command(
+        name="ping",
+        help="Comando para mencionar a un usuario usando su nombre global."
+)
 async def ping(ctx, *, nombre):
     #Para manejar un error y usar discord como respuesta al error se debe usar el manejador de errores de discord.ext.commands alias on_command_error() o error().
     #Tambien hay un condicional llamado check usado comunmente para verificar permisos de usuario y si puede usar comandos o no.
@@ -149,7 +201,10 @@ async def ping(ctx, *, nombre):
         await ctx.send(f'Pong {tempUserObject.mention}') #con los objetos Puedo mencionar, sacarle la info del objeto (User)
 
 
-@elBulloso.command()
+@elBulloso.command(
+        name="info",
+        help = "Este comando manda un mensaje con la informacion del servidor."
+)
 async def info(ctx):
     ambed = discord.Embed(title=f'{ctx.guild.name}', description=f"La mierda mas grande jamas vista",timestamp=datetime.datetime.utcnow(), color=discord.colour.Color.dark_blue())
     ambed.add_field(name="Dueño del server", value=f'{ctx.guild.owner}')
@@ -158,6 +213,89 @@ async def info(ctx):
     ambed.set_thumbnail(url=f"{ctx.guild.icon}")
     ambed.set_author(name="sebaxsus")
     await ctx.send(embed=ambed)
+
+@elBulloso.command(
+    name="cola",
+    aliases=["c"],
+    help="Commando para mostrar la reproduccion de la cola."
+)
+async def cola(ctx):
+    idGuild = int(ctx.guild.id)
+    returnVaule = ""
+    colaEmbed = discord.Embed(
+        title="Cola de Reproduccion",
+        description=returnVaule,
+        colour=0x2c76dd
+    )
+    if queue[idGuild] == []:
+        colaEmbed.clear_fields()
+        colaEmbed.add_field(name="Cola Vacia",value="No hay canciones el la cola de reproducion.")
+    else:
+        for i in range(queueIndex[idGuild], len(queue[idGuild])):
+            upNextSongs = len(queue[idGuild]) - queueIndex[idGuild]
+            if i > 5 + upNextSongs:
+                break
+            returnIndex = i - queueIndex[idGuild]
+            if returnIndex == 0:
+                returnIndex = "Escuchando"
+            elif returnIndex == 1:
+                returnIndex = "Siguente"
+            colaEmbed.add_field(name=f"{returnIndex}", value=f"[{queue[idGuild][i][0]['Titulo']}]({queue[idGuild][i][0]['link']})\n- {queue[idGuild][i][0]['Canal']} {queue[idGuild][i][0]['Duracion']}", inline=False)
+            returnVaule += f"{returnIndex} - [{queue[idGuild][i][0]['Titulo']}]({queue[idGuild][i][0]['link']}) - {queue[idGuild][i][0]['Canal']} {queue[idGuild][i][0]['Duracion']}"
+
+            if returnVaule == "":
+                colaEmbed.clear_fields()
+                colaEmbed.add_field(name="Cola Vacia",value="No hay canciones el la cola de reproducion.")
+    await ctx.send(embed=colaEmbed)
+
+@elBulloso.command(
+    name="limpiar",
+    aliases=["l"],
+    help="Commando para limpiear/Eliminar la cola de reproduccion."
+)
+async def limpiar(ctx):
+    idGuild = int(ctx.guild.id)
+    usuario = ctx.author
+    pfp = usuario.display_avatar
+    embedClear = discord.Embed(
+        title="Cola de reproduccion Limpiada!",
+        description=f'Se quitaron correctamente de la cola de reproduccion todas las canciones',
+        colour=0x0eaa51
+    )
+    embedClear.set_footer(text=f'Peticion de: {str(usuario)}', icon_url=pfp)
+    if isInVc != None and isPlaying[idGuild]:
+        isPlaying[idGuild] = False
+        isPaused[idGuild] = False
+        isInVc[idGuild].pause()
+    if queue[idGuild] != []:
+        await ctx.send(embed=embedClear)
+        queue[idGuild] = []
+    queueIndex[idGuild] = 0
+
+@elBulloso.command(
+        name="eliminar",
+        aliases=["rm"],
+        help="Este comando elimina la ultima cancion agregada a la cola de reproduccion."
+)
+async def eliminar(ctx):
+    idGuild = int(ctx.guild.id)
+    if queue[idGuild] != []:
+        cancion = queue[idGuild][-1][0]
+        await ctx.send(embed=embed_Eliminado_Queue(ctx, cancion))
+    else:
+        await ctx.send("No hay canciones en la cola de reproduccion.")
+    queue[idGuild] = queue[idGuild][:-1]
+    if queue[idGuild] == []:
+        if isInVc[idGuild] != None and isPlaying[idGuild]:
+            isPlaying[idGuild] = isPaused[idGuild] = False
+            isInVc.disconnect()
+            isInVc[idGuild] = None
+        queueIndex[idGuild] = 0
+    elif queueIndex[idGuild] == len(queue[idGuild]) and isInVc[idGuild] != None and isInVc[idGuild]:
+        isInVc.pause()
+        queueIndex[idGuild] -= 1
+        await reproducir(ctx)
+
 
 @elBulloso.command(
     name="pause",
@@ -189,6 +327,47 @@ async def resume(ctx):
         isPaused[idGuild] = False
         isInVc[idGuild].resume()
 
+@elBulloso.command(
+    name="skip",
+    aliases=["s"],
+    help="Commando para saltar a la siguente cancion en la cola de reproducion"
+)
+async def skip(ctx):
+    idGuild = int(ctx.guild.id)
+    #cancion = queue[idGuild][queueIndex[idGuild]][0]
+    if isInVc[idGuild] == None:
+        await ctx.send(f"{ctx.author} Necesita estar en un canal de voz para usar ester comando!")
+    elif queueIndex[idGuild] >= len(queue[idGuild]) - 1:
+        await ctx.send("No hay mas canciones en la cola de reproducion\nQuitando La cancion")
+        isInVc[idGuild].stop()
+        siguienteCancion(ctx)
+        #await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
+    elif isInVc[idGuild] != None and isInVc[idGuild]:
+        isInVc[idGuild].pause()
+        queueIndex[idGuild] += 1
+        await reproducir(ctx)
+
+@elBulloso.command(
+    name="previus",
+    aliases=["pr"],
+    help="Commando para volver una cancion en la cola de reproducion"
+)
+async def previus(ctx):
+    idGuild = int(ctx.guild.id)
+    #cancion = queue[idGuild][queueIndex[idGuild]][0]
+    if isInVc[idGuild] == None:
+        await ctx.send(f"{ctx.author} Necesita estar en un canal de voz para usar ester comando!")
+    elif queueIndex[idGuild] <= 0:
+        await ctx.send("No hay cancion anterior en la cola de reproducion\nVolviendo a reproducir la cancion actual")
+        isInVc[idGuild].pause()
+        await reproducir(ctx)
+        #await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
+    elif isInVc[idGuild] != None and isInVc[idGuild]:
+        isInVc[idGuild].pause()
+        queueIndex[idGuild] -= 1
+        await reproducir(ctx)
+
+
 #Comando para conectar / Mover el bot a un canal de voz Edit: No deberia ser un comando
 #Funcion para conectar el bot al canal de voz del autor 
 #@elBulloso.command()
@@ -214,16 +393,20 @@ def embed_Reproduciendo_Ahora(ctx, cancion):
     link = cancion['link']
     #link = 'prueba'
     miniatura = cancion['Miniatura']
+    Canal = cancion['Canal']
+    Duracion = cancion['Duracion']
     usuario = ctx.author
     #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
     pfp = usuario.display_avatar
     embed = discord.Embed(
-        title="Reproduciendo:",
+        title="* Reproduciendo:",
         description=f'[{Titulo}]({link})',
         colour=0x2c76dd
     )
+    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
     embed.set_thumbnail(url=miniatura)
     embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_author(name=f"{Canal}")
     return embed
 
 def embed_Añadido_Queue(ctx, cancion):
@@ -231,30 +414,62 @@ def embed_Añadido_Queue(ctx, cancion):
     link = cancion['link']
     #link = 'prueba'
     miniatura = cancion['Miniatura']
+    Canal = cancion['Canal']
+    Duracion = cancion['Duracion']
     usuario = ctx.author
     #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
     pfp = usuario.display_avatar
     embed = discord.Embed(
-        title="Añadido a la cola:",
+        title="* Añadido a la cola:",
         description=f'[{Titulo}]({link})',
         colour=0x2c76dd
     )
+    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
     embed.set_thumbnail(url=miniatura)
     embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_author(name=f"{Canal}")
     return embed
 
-async def mensaje(ctx, mensaje):
+def embed_Eliminado_Queue(ctx, cancion):
+    Titulo = cancion['Titulo']
+    link = cancion['link']
+    #link = 'prueba'
+    miniatura = cancion['Miniatura']
+    Canal = cancion['Canal']
+    Duracion = cancion['Duracion']
+    usuario = ctx.author
+    #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
+    pfp = usuario.display_avatar
+    embed = discord.Embed(
+        title="* Eliminado de la Cola:",
+        description=f'[{Titulo}]({link})',
+        colour=0x2c76dd
+    )
+    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
+    embed.set_thumbnail(url=miniatura)
+    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_author(name=f"{Canal}")
+    return embed
+
+async def mensaje(ctx, cancion):
+    #idGuild = int(ctx.guild.id)
+    #corutina = ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
+    em = embed_Reproduciendo_Ahora(ctx, cancion)
+    #fut = asyncio.run_coroutine_threadsafe(corutina, elBulloso.loop)
+    #await ctx.send(embed=em)
     try:
-        print("Entro a mensaje embed")
-        await ctx.send(embed=mensaje)
+        #print("Entro a mensaje embed")
+        #print('entro a mensaje')
+        #fut.result()
+        await ctx.send(embed=em)
     except:
         print("Error al mandar mensaje mediante la funcion mensaje")
-        return
+        pass
     else:
         return
 
 async def siguienteCancion(ctx):
-    #print("\nEntro a siguiente cancion")
+    print("\nEntro a siguiente cancion")
     idGuild = int(ctx.guild.id)
     if not isPlaying[idGuild]:
         return
@@ -263,18 +478,17 @@ async def siguienteCancion(ctx):
         queueIndex[idGuild] += 1
 
         cancion = queue[idGuild][queueIndex[idGuild]][0]
-        mensaje(ctx, embed_Reproduciendo_Ahora(ctx, cancion))
-        print("anted de await ctx.send en linea 267")
-        await ctx.send(embed= embed_Reproduciendo_Ahora(ctx, cancion))
-       # print(f"Source: {cancion['Source']}")
-        await isInVc[idGuild].play(discord.FFmpegPCMAudio(
-            source=getStream(cancion['link']), pipe=True), after=lambda e: siguienteCancion(ctx)
-        )
+        await mensaje(ctx, cancion)
+        #print("anted de await ctx.send en linea 267")
+        #await ctx.send(embed= embed_Reproduciendo_Ahora(ctx, cancion))
+        #print(f"Source: {cancion['Source']}")
+        isInVc[idGuild].play(discord.FFmpegPCMAudio(
+            source=cancion['buffer'], pipe=True), after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.loop))
+        isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
     else:
         queueIndex[idGuild] += 1
         isPlaying[idGuild] = False
         
-
 
 #Funcion para reproducir la musica
 async def reproducir(ctx):
@@ -283,28 +497,37 @@ async def reproducir(ctx):
         isPlaying[idGuild] = True
         isPaused[idGuild] = False
 
+        print(f"Estado is playing: {isPlaying[idGuild]} ")
+
         await conectarse(ctx, queue[idGuild][queueIndex[idGuild]][1])
 
         cancion = queue[idGuild][queueIndex[idGuild]][0]
         await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
-        isInVc[idGuild].play(discord.FFmpegPCMAudio(source=getStream(cancion['link']), pipe=True), after= lambda e: siguienteCancion(ctx))
+        isInVc[idGuild].play(discord.FFmpegPCMAudio(source=cancion['buffer'], pipe=True), after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.loop))
         #print(f"Source: {cancion['Source']}")
         #isInVc[idGuild].play(discord.FFmpegPCMAudio(
         #    cancion['Source']), after=lambda e: siguienteCancion(ctx)
         #)
         isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
+        #print("Antes de siguente cancion")
     else:
         await ctx.send("No hay mas canciones en la cola de reproduccion")
         queueIndex[idGuild] += 1
         isPlaying[idGuild] = False
 
-@elBulloso.command()
+@elBulloso.command(
+        name="usuarios",
+        help="Este comando muestra la lista de usuarios que ve el bot."
+)
 async def usuarios(ctx):
     usuarios = list(elBulloso.users)
     for user in usuarios:
         await ctx.send(user)
 
-@elBulloso.command() #No sirve, al parecer la property mention no tiene setter, ._.
+@elBulloso.command(
+        name="sebax",
+        help="Comando para mencionar a sebax ._."
+) #No sirve, al parecer la property mention no tiene setter, ._.
 async def sebax(ctx):
     objetoUser = None
     for m in ctx.guild.members:
@@ -322,7 +545,7 @@ async def sebax(ctx):
 #Comando para unir al bot al canal de voz del usuario
 @elBulloso.command(
     name="unirse",
-    aliases=["u"],
+    aliases=["u","U","UNIRSE"],
     help="Comando usado para unir al bot al canal de voz actual"
 )
 async def unirse(ctx):
@@ -334,7 +557,7 @@ async def unirse(ctx):
 
 @elBulloso.command(
         name="salir",
-        aliases=["s"],
+        aliases=["sa","SA","SALIR"],
         help="Comando usado para desconectar el bot del canal de voz actual.\nEsto eliminara la cola de reproduccion actual."
 )
 async def salir(ctx):
@@ -355,12 +578,13 @@ async def salir(ctx):
 
 @elBulloso.command(
         name="play",
-        aliases=["p"],
+        aliases=["p","P","PLAY"],
         help="Comando para buscar en youtube una cancion con el nombre de la cancion"
 )
 async def play(ctx, *args):
     search = " ".join(args)
     idGuild = int(ctx.guild.id)
+    #print(search)
     try:
         channel = ctx.author.voice.channel
         await conectarse(ctx, channel)
@@ -388,10 +612,13 @@ async def play(ctx, *args):
         else:
             return
     else:
-        if esUrl(search) == True:
-            cancion = extraerCancion(search)
+        esplaylist = esPlaylistYT(search)
+        if esplaylist['bool'] == True:
+            cancion = await agregarPlaylistYT(ctx, esplaylist['url'], channel)
+        elif esUrl(search) == True:
+            cancion = getStream(search)
         else:
-            cancion = extraerCancion('https://www.youtube.com/watch?v='+buscar(search)[0])
+            cancion = getStream(buscar(search))
 
         if type(cancion) == type(True):
             await ctx.send(f"Que mierda buscate sapa {ctx.author.mention}")
