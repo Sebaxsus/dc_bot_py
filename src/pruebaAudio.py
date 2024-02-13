@@ -1,10 +1,169 @@
-import pyaudio, io, sys, pydub, pytube
+import pyaudio, io, sys, pydub, pytube, requests
 import numpy as np
 import wave
 import discord
 import re
 import time
+import spotipy
+from dotenv import dotenv_values, load_dotenv
+import os, pprint
+from subprocess import Popen, PIPE
+
 #:track_previous: :arrow_forward: :pause_button: :track_next:  Emojis
+
+#load_dotenv()
+
+#env = os.getenv('TOKEN') Se usa cuando tenemos el metodo load_dotnev()
+
+
+#dotenv_values crea un diccionario de las llaves (Varibles del .env) y su Valor (Lo que esta en esa Variable a.k.a Key)
+
+enviromentVariables = dotenv_values("bot_dc_py/src/.env")
+spClientId=enviromentVariables['SPOTIPY_CLIENT_ID']
+spClientSecret=enviromentVariables['SPOTIPY_CLIENT_SECRET']
+spApi = "https://api.spotify.com/v1/"
+spEndPoint = "/track/{track_id}"
+
+
+#https://open.spotify.com/intl-es/track/0F7pTAMyTJFdvveeQ1GfVL?si=177a7d9c30474fea
+#https://open.spotify.com/intl-es/track/5TmFTHZp7HjBXjjsFvCY6h?si=92184070569c4e95
+#https://api.spotify.com/v1/
+
+
+#print(enviromentVariables, enviromentVariables['TOKEN'])
+
+def pruebaSpotipy():
+    auth_manager = spotipy.oauth2.SpotifyClientCredentials(client_id=spClientId, client_secret=spClientSecret)
+    sp = spotipy.Spotify(auth_manager=auth_manager)
+
+    spPlaylist = sp.user_playlist(user=sp,playlist_id='4lEJgwqKnjvl4LRFC2Tpp2')
+    def pruebaStreamAudio(urlCancion):
+        rawCancion = sp.track(urlCancion)
+        print(rawCancion)
+        None
+
+    def prueba_MusicaSpoti():
+        scope = "user-read-playback-state,user-modify-playback-state"
+        sp = spotipy.Spotify(client_credentials_manager=spotipy.oauth2.SpotifyOAuth(client_id=spClientId,client_secret=spClientSecret,redirect_uri='http://localhost:3000',scope=scope))
+        # Shows playing devices
+        res = sp.devices()
+        pprint.pprint(res)
+
+        # Change track
+        sp.start_playback(uris=['spotify:track:0upFohXrGxIIAjyaJmCkMU'])
+
+        # Change volume
+        sp.volume(100)
+        time.sleep(2)
+        sp.volume(50)
+        time.sleep(2)
+        sp.volume(100)
+
+    #prueba_MusicaSpoti()
+
+    #print(type(spPlaylist['tracks']['items'][4])) #lista
+    def verKeyArtistTrack(artists):
+        print('Entro a artistas')
+        #print(spPlaylist['tracks']['items'][4]['track']['artists'])
+        mensajeArtistas = "|"
+        Keys = ['external_urls', 'href', 'id', 'name', 'type', 'uri', 'external_urls', 'href', 'id', 'name', 'type', 'uri']
+        for artist in artists:
+            #print(f"Nombre de artista: {artist['name']}")
+            mensajeArtistas += f" {artist['name']} |"
+
+                
+        return mensajeArtistas
+
+    #verKeyArtistTrack(spPlaylist['tracks']['items'][4]['track']['artists'])
+    #print(spPlaylist)
+    def obtenerDatosDeCadaTrackEnPl(pLTracks):
+        Keys = ['album', 'artists', 'disc_number', 'duration_ms', 'episode', 'explicit', 'external_ids', 'external_urls', 'href', 'id'
+                , 'is_local','is_playable', 'name', 'popularity', 'preview_url', 'track', 'track_number', 'type', 'uri']
+        Canciones = {}
+        #cancionIndex = 0
+        for trak in range(0, len(pLTracks)):
+            Canciones[f'{trak}'] = {
+            'nombreCancion' : pLTracks[trak]['track']['name'],
+            'href' : pLTracks[trak]['track']['href'],
+            'numeroCancion' : pLTracks[trak]['track']['track_number'],
+            'idCacion' : pLTracks[trak]['track']['id'],
+            'uri' : pLTracks[trak]['track']['uri'],
+            'Artista' : verKeyArtistTrack(pLTracks[trak]['track']['artists'])
+            }
+        return Canciones
+
+    #a = obtenerDatosDeCadaTrackEnPl(spPlaylist['tracks']['items'])
+    #for i in range(0, len(a)):
+        print(a[f'{i}'])
+        print("\n")
+                   
+
+
+
+
+
+    #obtenerDatosDeCadaTrackEnPl(spPlaylist['tracks'])
+    #                                                                         Indice de lista de items 
+    #obtener dictcionario de una cancion de una playlist spPlaylist['tracks']['items'][4]['track']
+    def obetenerIdDeUnaCancionEnPlaylist(dictTrackPL):
+        Keys = ['album', 'artists', 'disc_number', 'duration_ms', 'episode', 'explicit', 'external_ids', 'external_urls', 'href', 'id'
+                , 'is_local', 'name', 'popularity', 'preview_url', 'track', 'track_number', 'type', 'uri']
+        
+        #album y artist son diccionarios
+        #for i in dictTrackPL:
+            #print(i)
+        for key in Keys:
+            dictTrackPL[key]
+
+        #print(f"nombre: {dictTrackPL['name']} numeroEnPlaylist: {dictTrackPL['track_number']}, {dictTrackPL['track']} id: {dictTrackPL['id']} uri: {dictTrackPL['uri']}")
+    
+    #obetenerIdDeUnaCancionEnPlaylist(spPlaylist['tracks']['items'][4]['track'])
+
+    def verCadaDatodelasTracks(itemsDict):
+        for i in itemsDict:
+            #print(i)
+            print(f"Tipo de el dato Tracks: {type(itemsDict)}")
+            diccionarioTrack =itemsDict['track']
+            for j in diccionarioTrack:
+                print(f"Key Name: {j} Value: {diccionarioTrack[j]}")
+            break
+            for dictKey in ['added_at','added_by','is_local','primary_color','track','video_thumbnail']:
+                print(f"Key Name: {i} Value: {t[dictKey]}" )
+            break
+
+    #verCadaDatodelasTracks(spPlaylist['tracks']['items'][4])
+
+    #ver que tiene cada item
+    def verItemDeCadaTrackDeUnaPlayList():
+        #['tracks']['items'] = lista, items, so el idex de cada item son, 0 added_at, 1 added_by, 2 is_local, 3 primary_color, 4 track, 5 video_thumbnail,6 added_at
+
+        for t in spPlaylist['tracks']['items']:
+            #print(f"Item Name: {t} Value: {t.values()} \n")
+            #print(f"Item Name: {t}")
+            print(f"tipo de dato de items: {type(t)}")
+            for i in t:
+                print(f"Item Name: {i}  Value: {t[i]}\n")
+            break
+        print("\n\n\n ['tracks']['items'] = lista, items, so el idex de cada item son\n0 added_at\n1 added_by\n2 is_local\n3 primary_color\n4 track\n5 video_thumbnail\n6 added_at")
+    
+    #verItemDeCadaTrackDeUnaPlayList()
+    def obtenerItemsDeUnaPl():
+        for i in spPlaylist['tracks']:
+            print(i, '\t', spPlaylist['tracks'][i], '\n Fin Loop')
+        
+    def keysDictPlaylist():
+        Keys = ['collaborative', 'description', 'external_urls', 'followers', 'href', 'id', 'images', 'name', 'owner', 'primary_color', 'public', 'snapshot_id', 'tracks', 'type', 'uri']
+        for i in spPlaylist:
+            print(i)
+            time.sleep(5)
+
+    #keysDictPlaylist()
+    
+    #print(spPlaylist['tracks'])
+    
+
+#pruebaSpotipy()
+
 
 
 #Como busacar y sacar los datos de la busqueda por yt usando Pytube
@@ -65,9 +224,9 @@ def esPlaylistYT(texto):
         'bool' : tmp,
         'url' : texto
         }
-aleatoria = esPlaylistYT(txtPrb)
-print(aleatoria)
-print(aleatoria['bool'], aleatoria['url'])
+#aleatoria = esPlaylistYT(txtPrb)
+#print(aleatoria)
+#print(aleatoria['bool'], aleatoria['url'])
 
 #Como usar la funcion de playlist de pytube y sacar la info de esa playlist
 def PruebaDeUsodePlaylistPytube():
