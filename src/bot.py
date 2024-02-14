@@ -30,6 +30,7 @@ spApi = "https://api.spotify.com/v1/"
 spEndPoint = "/track/{track_id}"
 spURI = env['REDIRECT_URI']
 spUricall = 'http://google.com/callback/'
+tokenBot = env["TOKENDC"]
 
 scope = """ugc-image-upload,user-read-playback-state,user-modify-playback-state,user-read-currently-playing,
 app-remote-control,streaming,playlist-read-private,playlist-modify-public,playlist-read-collaborative,user-read-email,user-read-private
@@ -820,4 +821,4 @@ async def on_voice_state_update(member, before, after):
             queueIndex[idGuild] = 0
             await isInVc[idGuild].disconnect()
 
-elBulloso.run('MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc')
+elBulloso.run(tokenBot)
