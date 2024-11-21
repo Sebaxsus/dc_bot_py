@@ -24,13 +24,13 @@ env = dotenv.dotenv_values("bot_dc_py/src/.env")
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/authorize"
 
 #enviromentVariables = dotenv_values("bot_dc_py/src/.env")
-spClientId=env['SPOTIPY_CLIENT_ID']
-spClientSecret=env['SPOTIPY_CLIENT_SECRET']
+spClientId='99d13bd2585a46c8acc7b7c9028dbfbe'
+spClientSecret='dc04ddb0ad22464c94a65580f5fdd529'
 spApi = "https://api.spotify.com/v1/"
 spEndPoint = "/track/{track_id}"
-spURI = env['REDIRECT_URI']
+spURI = 'http://localhost:3000'
 spUricall = 'http://google.com/callback/'
-tokenBot = env["TOKENDC"]
+tokenBot = 'MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc'
 
 scope = """ugc-image-upload,user-read-playback-state,user-modify-playback-state,user-read-currently-playing,
 app-remote-control,streaming,playlist-read-private,playlist-modify-public,playlist-read-collaborative,user-read-email,user-read-private
@@ -115,12 +115,17 @@ def MensajeBasico(titulo, texto, color) -> discord.embeds.Embed:
     return em
 
 def verificarTokenSpotify():
+    global token
+    print("Entro a verificar token")
     tokenAuthSpotify = auth_manager.get_cached_token()
-    #print(auth_manager.is_token_expired(tokenAuthSpotify))
-    if auth_manager.is_token_expired(token_info=tokenAuthSpotify):
-        print(f"El token espiro: {auth_manager.is_token_expired(token_info=tokenAuthSpotify)}, Extendiendo Tiempo del Token...")
+    
+    print(auth_manager.is_token_expired(auth_manager.get_cached_token()))
+    if auth_manager.is_token_expired(auth_manager.get_cached_token()):
+        print(f"El token espiro: {auth_manager.is_token_expired(auth_manager.get_cached_token())}, Extendiendo Tiempo del Token...")
         try:
-            auth_manager.refresh_access_token(refresh_token=tokenAuthSpotify)
+            token = auth_manager.refresh_access_token(auth_manager.get_cached_token()['refresh_toekn'])
+            print("Nuevo token: ", token['access_token'],"\n",token)
+            #token = auth_manager.get_access_token()
         except:
             print(f"No se pudo extender el Tiempo del token en spotify")
         else:
@@ -136,7 +141,7 @@ def nombreArtiCancionPlaylistTrack(datosTrack):
     return f"{cancion} - {artistaN}"
 
 def guardarCancionesSpList(datos, idGuild, channel):
-    for i in range(0, 10, 1):
+    for i in range(0, 50, 1):
 
         strCancion = nombreArtiCancionPlaylistTrack((datos[i]['track']))
         cancion = getStream(buscar(strCancion))
@@ -209,7 +214,7 @@ def getStream(url):
     buffer = io.BytesIO()
     #Con la libreria Pytube crea un objeto de la url de yotube
     yt = pytube.YouTube(url)
-
+    print("Paso la busqueda en yt con Pytube")
     #Obtengo el stream (DASH) y lo filtro para solo obtener el audio y obtener el primer resultado
     audio_stream = yt.streams.filter(only_audio=True).first()
     
