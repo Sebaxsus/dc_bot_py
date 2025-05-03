@@ -1,23 +1,8 @@
 import discord 
+from discord import app_commands
 from discord.ext import commands
-import pyaudio, io, sys, pydub, pytube, spotipy, dotenv, time
-import numpy as np
-import wave
-import os
+import spotipy, dotenv, yt_dlp, asyncio, functools, datetime
 
-import datetime
-
-from urllib import parse, request
-import re
-import json
-import os
-#from youtube_dl import YoutubeDL
-import asyncio, functools
-from yt_dlp import YoutubeDL
-from youtubesearchpython import VideosSearch
-
-
-#Variables para spotipy
 
 env = dotenv.dotenv_values("bot_dc_py/src/.env")
 
@@ -36,22 +21,26 @@ scope = """ugc-image-upload,user-read-playback-state,user-modify-playback-state,
 app-remote-control,streaming,playlist-read-private,playlist-modify-public,playlist-read-collaborative,user-read-email,user-read-private
 """
 
-auth_manager = spotipy.oauth2.SpotifyPKCE(client_id=spClientId,redirect_uri=spUricall,scope=scope)
+auth_manager = spotipy.oauth2.SpotifyPKCE(
+    client_id=spClientId,
+    redirect_uri=spUricall,
+    scope=scope
+)
 #auth_manager = spotipy.oauth2.SpotifyClientCredentials(client_id=spClientId, client_secret=spClientSecret)
-token = auth_manager.get_access_token()
+# token = auth_manager.get_access_token()
 #token = token_dict['access_token']
-#cliente = spotipy.Spotify(auth_manager=auth_manager)
 
-try:
-    #print(token)
-    cliente = spotipy.Spotify(auth=token)
-    user_name = cliente.current_user() 
-except:
-    print("Fallo token")
-else:
-    #print(json.dumps(user_name, sort_keys=True, indent=4))
-    #print(f'token: {token}')
-    print('token correcto')
+cliente = spotipy.Spotify(auth_manager=auth_manager)
+
+# try:
+#     #print(token)
+#     user_name = cliente.current_user() 
+# except:
+#     print("Fallo token")
+# else:
+#     #print(json.dumps(user_name, sort_keys=True, indent=4))
+#     #print(f'token: {token}')
+#     print('token correcto')
 
 
 ########################################################## Discord Para Abajo
@@ -92,18 +81,38 @@ isInVc = {}
 #YTDL_OPTIONS = {'format': 'bestaudio', 'nonplaylist': 'True'}
 #FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
-
-YTDL_OPTIONS = {'format': 'bestaudio/best',
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '192',
-    }]
+ydl_options = {
+    'format': 'bestaudio/best', # Selecciono el mejor formato de audio disponible
+    'quiet': True, # Silencia el log de yt_dlp
+    'no_warnings': True, # Silencia las advertencias en consola de yt_dlp
+    'skip_download': True, # No descarga el archivo
+    'default_search': 'ytsearch',
+    'extract_flat': False,
+    'noplaylist': True,
+    'default_search': 'ytsearch3',
 }
-FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
-#def endSong(path):
-    #os.remove(path)
+FFMPEG_OPTIONS = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 
+    'options': '-vn',
+    }
+
+def verificarTokenSpotify():
+    global token
+    print("Entro a verificar token")
+    tokenAuthSpotify = auth_manager.get_cached_token()
+    
+    print(auth_manager.is_token_expired(tokenAuthSpotify))
+    if auth_manager.is_token_expired(tokenAuthSpotify):
+        print(f"El token espiro: {auth_manager.is_token_expired(tokenAuthSpotify)}, Extendiendo Tiempo del Token...")
+        try:
+            token = auth_manager.refresh_access_token(tokenAuthSpotify['refresh_token'])
+            print("Nuevo token: ", token['access_token'],"\n",token)
+            #token = auth_manager.get_access_token()
+        except Exception as e:
+            print(f"No se pudo extender el Tiempo del token en spotify, ", e)
+        else:
+            print(f"Se extendio el tiempo del token:\nExpiro el token?: {auth_manager.is_token_expired(tokenAuthSpotify)}")
 
 def MensajeBasico(titulo, texto, color) -> discord.embeds.Embed:
     em = discord.Embed(
@@ -114,22 +123,40 @@ def MensajeBasico(titulo, texto, color) -> discord.embeds.Embed:
     em.set_footer(icon_url=elBulloso.user.display_avatar)
     return em
 
-def verificarTokenSpotify():
-    global token
-    print("Entro a verificar token")
-    tokenAuthSpotify = auth_manager.get_cached_token()
-    
-    print(auth_manager.is_token_expired(auth_manager.get_cached_token()))
-    if auth_manager.is_token_expired(auth_manager.get_cached_token()):
-        print(f"El token espiro: {auth_manager.is_token_expired(auth_manager.get_cached_token())}, Extendiendo Tiempo del Token...")
-        try:
-            token = auth_manager.refresh_access_token(auth_manager.get_cached_token()['refresh_toekn'])
-            print("Nuevo token: ", token['access_token'],"\n",token)
-            #token = auth_manager.get_access_token()
-        except:
-            print(f"No se pudo extender el Tiempo del token en spotify")
-        else:
-            print(f"Se extendio el tiempo del token:\nExpiro el token?: {auth_manager.is_token_expired(tokenAuthSpotify)}")
+def embed_Reproduciendo_Ahora(ctx, cancion):
+    Titulo = cancion['Titulo']
+    link = cancion['link']
+    #link = 'prueba'
+    miniatura = cancion['Miniatura']
+    Canal = cancion['Canal']
+    Duracion = cancion['Duracion']
+    usuario = ctx.author
+    #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
+    pfp = usuario.display_avatar
+    embed = discord.Embed(
+        title="* Reproduciendo:",
+        description=f'[{Titulo}]({link})',
+        colour=0x2c76dd
+    )
+    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
+    embed.set_thumbnail(url=miniatura)
+    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_author(name=f"{Canal}")
+    return embed
+
+def format_audio_seconds(seconds):
+    if seconds is None:
+        return "desconocido"
+    mins, secs = divmod(int(seconds), 60)
+    return f"{mins}:{secs:02}"
+
+def esUrl(texto):
+    tmp = False
+    texto = texto.split()
+    for i in texto:
+        if i.startswith("https:"):
+            tmp = True
+    return tmp
 
 def nombreArtiCancionPlaylistTrack(datosTrack):
     artistaN = ""
@@ -141,157 +168,183 @@ def nombreArtiCancionPlaylistTrack(datosTrack):
     return f"{cancion} - {artistaN}"
 
 def guardarCancionesSpList(datos, idGuild, channel):
-    for i in range(0, 50, 1):
+    # Datos es una lista que contiene todas las canciones de la Playlist
+    # Dentro, es decir que su length es la cantidad de canciones dentro de la lista
+    cancion = None
+    for i, track in enumerate(datos):
 
-        strCancion = nombreArtiCancionPlaylistTrack((datos[i]['track']))
-        cancion = getStream(buscar(strCancion))
+        strCancion = nombreArtiCancionPlaylistTrack((track['track']))
+        cancion = buscar(strCancion)
 
         queue[idGuild].append([cancion, channel])
+        print(f"Cancion {i}: ", cancion['Titulo'])
+
     return cancion
 
 async def busquedaPlaylist(ctx, channel, urlPlaylist):
     idGuild = int(ctx.guild.id)
 
-    strCancion = ""
-    cancion = None
+    # strCancion = ""
+    # cancion = None
     #Datos es la cantidad de canciones que contiene la playlist
+    # ciclosDatosCancion = divmod(len(datos), 5)
+    # Mod, restante
+
     datos = cliente.playlist(urlPlaylist)['tracks']['items']
-    ciclosDatosCancion = 0
+    # Bloque de varias tareas
+    bloques = [datos[i:i + 5] for i in range(0, len(datos), 5)]
+
+    #Tareas nose
+    tareas = []
+
+    primer_bloque = bloques[0]
+    func = functools.partial(guardarCancionesSpList, primer_bloque, idGuild, channel)
+
+    #Espero a que se resuelva el primero bloque
+    await elBulloso.loop.run_in_executor(None, func=func)
+
+    # Reproducir primera cancion en el diccionario queue (cola)
+    await reproducir(ctx)
 
     #Leer recurso para entender esto Link https://stackoverflow.com/questions/65881761/discord-gateway-warning-shard-id-none-heartbeat-blocked-for-more-than-10-second
-    
-    func = functools.partial(guardarCancionesSpList, datos, idGuild, channel)
+    for bloque in bloques[1:]:
+
+        # ini = 5 * i #al inicio sera 5 * 0 que es cero y nuestro punto de partida
+        # last = 5 * (i + 1) # Al inicio sera 5 * (0 + 1) que es 5
+        # if i == ciclosDatosCancion[0]:
+        #     last = len(datos)
         #if not isPlaying[idGuild]:
             #asyncio.run_coroutine_threadsafe(reproducir(ctx), elBulloso.loop)
             #await reproducir(ctx)
         #else:
             #await ctx.send(embed=embed_Añadido_Queue(ctx, cancion))
             #pass
-    return await elBulloso.loop.run_in_executor(None, func=func)
 
+        func = functools.partial(guardarCancionesSpList, bloque, idGuild, channel)
+        # El bloque de tareas que se va a guardar en la lista de bloques de tareas
+        tarea = elBulloso.loop.run_in_executor(None, func=func)
+        # Agregando el bloque de tareas a la lista de bloques de tareas
+        tareas.append(tarea)
+    # Espero a que todas las tareas terminen
+    resultados = await asyncio.gather(*tareas)
 
-#def esPlaylistYT(texto):
-    #tmp = False
-    #texto = texto.split()
-    #for i in texto:
-        #if i.startswith("https://www.youtube.com/playlist?list="):
-            #print(i, " ", tmp)
-            #texto = i
-            #tmp = True
-            #break
-    #return {
-        #'bool' : tmp,
-        #'url' : texto
-        #}
+    return resultados[-1] if resultados else None
+        
 
-async def agregarPlaylistYT(ctx, url, channel):
-    cancion = None
-    playlistYT = pytube.Playlist(url)
-    idGuild = int(ctx.guild.id)
-    for audio in playlistYT.video_urls:
-        cancion = getStream(audio)
-        queue[idGuild].append([cancion, channel])
-
-        if not isPlaying[idGuild]:
-            await reproducir(ctx)
-        else:
-            await ctx.send(embed=embed_Añadido_Queue(ctx, cancion), silent=True)
-    return cancion
-
-
-def esUrl(texto):
-    tmp = False
-    texto = texto.split()
-    for i in texto:
-        if i.startswith("https:"):
-            tmp = True
-    return tmp
-
-#Funcion para extraer el audio/cancion de el resultado de busqueda en $play
-def getStream(url):
-    print(f"Buscando... {url}")
-    #Crea un buffer
-    buffer = io.BytesIO()
-    #Con la libreria Pytube crea un objeto de la url de yotube
-    yt = pytube.YouTube(url)
-    print("Paso la busqueda en yt con Pytube")
-    #Obtengo el stream (DASH) y lo filtro para solo obtener el audio y obtener el primer resultado
-    audio_stream = yt.streams.filter(only_audio=True).first()
-    # audio_stream = yt.streams.first()
-    req = request.Request(audio_stream.url, headers={
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    })
-
-    
-    print(request.urlopen(req), " Url o.o ", req)
-    #Con la libreria io methodo BytesIo que me escribe el stream en el buffer
-    audio_data = io.BytesIO(audio_stream.stream_to_buffer(buffer))
-
-    #Inicializo el buffer, Por que ni idea
-    buffer.seek(0)
-
-    #audio = pydub.AudioSegment.from_file(buffer, format="mp4")
-
-    #audio_source = discord.AudioSource.read(audio)
-
-    #print("audio source type: ", audio_source)
-
-
-    #Mando el buffer en formato BufferedIOBase
-    Minutos = int(yt.length / 60)
-    Segundos = yt.length % 60
-    if Segundos < 10:
-        Segundos = '0'+str(Segundos)
-    return {
-        'buffer': buffer,
-        'link': url,
-        'Miniatura': yt.thumbnail_url,
-        'Source': url,
-        'Titulo': yt.title,
-        'Canal' : yt.author,
-        'Duracion' : f"{Minutos}:{Segundos}"
-    }
-
-#funcion que lee el mensaje y busca eso mismo en youtube
 def buscar(search):
-    return "https://www.youtube.com/watch?v=" + pytube.Search(search).results[0].video_id 
+    print("Buscando... ", search)
+    with yt_dlp.YoutubeDL(ydl_options) as ydl:
+        # search_results = []
+        info = ydl.extract_info(f"ytsearch3:{search}", download=False)
+        info = info['entries']
+        return {
+            'Titulo': info[0].get('title'),
+            'link': info[0]['webpage_url'],
+            'streamUrl': info[0]['url'],
+            'Canal': info[0].get('uploader'),
+            'Duracion': info[0].get('duration_string'), # Devuelve el tiempo de duracion ya formateado
+            'Miniatura': info[0]['thumbnail'],
+        }
+        # for entry_info in info['entries']:
+        #     title = entry_info.get("title", "Sin titulo")
+        #     duration = entry_info.get("duration",0)
+        #     search_results.append(entry_info)
 
-#Funcion para extraer el audio/cancion de el resultado de busqueda en $play
-def extraerCancion(url):
-    codeUrl = url.removeprefix("https://www.youtube.com/watch?v=")
-    print(codeUrl)
-    with YoutubeDL(YTDL_OPTIONS) as ydl:
-        try:
-            raw = ydl.extract_info(codeUrl, download=False)["title"]
-        except:
-            return False
-    search = VideosSearch(url, limit= 1)
-    #print(search.result())
-    #print(search.result()["result"][0]["channel"]["name"], " Espacio ", search.result()["result"][0]["accessibility"]["duration"])
-    #print("\nSeparador\n")
-    #print(search.result()["result"][0])
-    #print("\nSeparador\n")
-    #print(search.result()["result"][0]["link"])
-    return {
-        'link': url,
-        'Miniatura': 'https://i.ytimg.com/vi/' + codeUrl + '/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig',
-        'Source': search.result()["result"][0]["link"],
-        'Titulo': search.result()["result"][0]["title"],
-        'Canal' : search.result()["result"][0]["channel"]["name"],
-        'Duracion' : search.result()["result"][0]["duration"]
-    }
+def getStream(url):
 
-#funcion que lee el mensaje y busca eso mismo en youtube
-#def buscar(search):
-    #buscar = parse.urlencode({'search_query': search})#                                                                              <<<---   (search_query=search)
-    #htmlContent = request.urlopen('https://www.youtube.com/results?' + buscar)#htmlContent = request.urlopen('https://www.youtube.com/results?' + buscar)
-    #resultadosBusqueda = re.findall('/watch\?v=(.{11})', htmlContent.read().decode())
-    #print(f"Resultados Busqueda: https://www.youtube.com/results?{buscar} \n")
-    #print(resultadosBusqueda[0:5])
-    #return resultadosBusqueda[0:2]
+    with yt_dlp.YoutubeDL(ydl_options) as ydl:
 
+        info = ydl.extract_info(url, download=False)
 
+        return {
+            'Titulo': info.get('title'),
+            'link': info['webpage_url'],
+            'streamUrl': info['url'],
+            'Canal': info.get('uploader'),
+            'Duracion': format_audio_seconds(info.get('duration')),
+            'Miniatura': info['thumbnail'],
+            'info': info,
+        }
+def embed_Reproduciendo_Ahora(ctx, cancion):
+    Titulo = cancion['Titulo']
+    link = cancion['link']
+    #link = 'prueba'
+    miniatura = cancion['Miniatura']
+    Canal = cancion['Canal']
+    Duracion = cancion['Duracion']
+    usuario = ctx.author
+    #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
+    pfp = usuario.display_avatar
+    embed = discord.Embed(
+        title="* Reproduciendo:",
+        description=f'[{Titulo}]({link})',
+        colour=0x2c76dd
+    )
+    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
+    embed.set_thumbnail(url=miniatura)
+    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_author(name=f"{Canal}")
+    return embed
 
+def embed_Añadido_Queue(ctx, cancion):
+    Titulo = cancion['Titulo']
+    link = cancion['link']
+    #link = 'prueba'
+    miniatura = cancion['Miniatura']
+    Canal = cancion['Canal']
+    Duracion = cancion['Duracion']
+    usuario = ctx.author
+    #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
+    pfp = usuario.display_avatar
+    embed = discord.Embed(
+        title="* Añadido a la cola:",
+        description=f'[{Titulo}]({link})',
+        colour=DARK_PURPLE
+    )
+    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
+    embed.set_thumbnail(url=miniatura)
+    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_author(name=f"{Canal}")
+    return embed
+
+def embed_Eliminado_Queue(ctx, cancion):
+    Titulo = cancion['Titulo']
+    link = cancion['link']
+    #link = 'prueba'
+    miniatura = cancion['Miniatura']
+    Canal = cancion['Canal']
+    Duracion = cancion['Duracion']
+    usuario = ctx.author
+    #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
+    pfp = usuario.display_avatar
+    embed = discord.Embed(
+        title="* Eliminado de la Cola:",
+        description=f'[{Titulo}]({link})',
+        colour=DARK_RED
+    )
+    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
+    embed.set_thumbnail(url=miniatura)
+    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_author(name=f"{Canal}")
+    return embed
+
+async def mensaje(ctx, cancion):
+    #idGuild = int(ctx.guild.id)
+    #corutina = ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
+    em = embed_Reproduciendo_Ahora(ctx, cancion)
+    #fut = asyncio.run_coroutine_threadsafe(corutina, elBulloso.loop)
+    #await ctx.send(embed=em)
+    try:
+        #print("Entro a mensaje embed")
+        #print('entro a mensaje')
+        #fut.result()
+        await ctx.send(embed=em, silent=True)
+    except:
+        print("Error al mandar mensaje mediante la funcion mensaje")
+        pass
+    else:
+        return
+    
 #El discord.utils.find solo busca los nombres exactos sin alias el nombre de discord
 @elBulloso.command(
         name="ping",
@@ -447,6 +500,7 @@ async def pause(ctx):
     help="Commando para volver a reproducir una cancion pausada"
 )
 async def resume(ctx):
+    print("Resumiendo...")
     idGuild = int(ctx.guild.id)
     if not isInVc[idGuild]:
         await ctx.send(embed=MensajeBasico("No se pudo reanudar :nerd: ","No hay canciones por reproducir.",ROJO), silent=True)
@@ -508,107 +562,6 @@ async def previus(ctx):
         queueIndex[idGuild] -= 1
         await reproducir(ctx)
 
-
-#Comando para conectar / Mover el bot a un canal de voz Edit: No deberia ser un comando
-#Funcion para conectar el bot al canal de voz del autor 
-#@elBulloso.command()
-async def conectarse(ctx, channel):
-    idGuild = int(ctx.guild.id)
-    if isInVc[idGuild] == None or not isInVc[idGuild].is_connected():
-        isInVc[idGuild] = await channel.connect()
-        em = discord.Embed(
-            title=f"Conectado a {ctx.author.voice.channel}",
-            description=f"Peticion de union hecha por {ctx.author.mention}",
-            colour=VERDE
-        )
-        em.set_footer(icon_url=elBulloso.user.display_avatar)
-        await ctx.send(embed=em, silent=True)
-        if isInVc[idGuild] == None:
-            await ctx.send(embed=MensajeBasico("A lo bien :middle_finger:","No me pude conectar al canal de voz\nDebe estar en un canal de Voz",ROJO))
-            return
-    else:
-        await isInVc[idGuild].move_to(channel)
-
-def embed_Reproduciendo_Ahora(ctx, cancion):
-    Titulo = cancion['Titulo']
-    link = cancion['link']
-    #link = 'prueba'
-    miniatura = cancion['Miniatura']
-    Canal = cancion['Canal']
-    Duracion = cancion['Duracion']
-    usuario = ctx.author
-    #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
-    pfp = usuario.display_avatar
-    embed = discord.Embed(
-        title="* Reproduciendo:",
-        description=f'[{Titulo}]({link})',
-        colour=0x2c76dd
-    )
-    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
-    embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
-    embed.set_author(name=f"{Canal}")
-    return embed
-
-def embed_Añadido_Queue(ctx, cancion):
-    Titulo = cancion['Titulo']
-    link = cancion['link']
-    #link = 'prueba'
-    miniatura = cancion['Miniatura']
-    Canal = cancion['Canal']
-    Duracion = cancion['Duracion']
-    usuario = ctx.author
-    #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
-    pfp = usuario.display_avatar
-    embed = discord.Embed(
-        title="* Añadido a la cola:",
-        description=f'[{Titulo}]({link})',
-        colour=DARK_PURPLE
-    )
-    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
-    embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
-    embed.set_author(name=f"{Canal}")
-    return embed
-
-def embed_Eliminado_Queue(ctx, cancion):
-    Titulo = cancion['Titulo']
-    link = cancion['link']
-    #link = 'prueba'
-    miniatura = cancion['Miniatura']
-    Canal = cancion['Canal']
-    Duracion = cancion['Duracion']
-    usuario = ctx.author
-    #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
-    pfp = usuario.display_avatar
-    embed = discord.Embed(
-        title="* Eliminado de la Cola:",
-        description=f'[{Titulo}]({link})',
-        colour=DARK_RED
-    )
-    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
-    embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
-    embed.set_author(name=f"{Canal}")
-    return embed
-
-async def mensaje(ctx, cancion):
-    #idGuild = int(ctx.guild.id)
-    #corutina = ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
-    em = embed_Reproduciendo_Ahora(ctx, cancion)
-    #fut = asyncio.run_coroutine_threadsafe(corutina, elBulloso.loop)
-    #await ctx.send(embed=em)
-    try:
-        #print("Entro a mensaje embed")
-        #print('entro a mensaje')
-        #fut.result()
-        await ctx.send(embed=em, silent=True)
-    except:
-        print("Error al mandar mensaje mediante la funcion mensaje")
-        pass
-    else:
-        return
-
 async def siguienteCancion(ctx):
     #print("\nEntro a siguiente cancion")
     idGuild = int(ctx.guild.id)
@@ -623,8 +576,8 @@ async def siguienteCancion(ctx):
         #print("anted de await ctx.send en linea 267")
         #await ctx.send(embed= embed_Reproduciendo_Ahora(ctx, cancion))
         #print(f"Source: {cancion['Source']}")
-        isInVc[idGuild].play(discord.FFmpegPCMAudio(
-            source=cancion['buffer'], pipe=True), after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.loop))
+        source = discord.FFmpegPCMAudio(cancion['streamUrl'], **FFMPEG_OPTIONS)
+        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.loop))
         isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
     else:
         queueIndex[idGuild] += 1
@@ -645,7 +598,8 @@ async def reproducir(ctx):
 
         cancion = queue[idGuild][queueIndex[idGuild]][0]
         await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion), silent=True)
-        isInVc[idGuild].play(discord.FFmpegPCMAudio(source=cancion['buffer'], pipe=True), after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.loop))
+        source = discord.FFmpegPCMAudio(cancion['streamUrl'], **FFMPEG_OPTIONS)
+        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.loop))
         #print(f"Source: {cancion['Source']}")
         #isInVc[idGuild].play(discord.FFmpegPCMAudio(
         #    cancion['Source']), after=lambda e: siguienteCancion(ctx)
@@ -656,6 +610,26 @@ async def reproducir(ctx):
         await ctx.send(embed=MensajeBasico("Cola Vacia! :melting_face: ","No hay mas canciones en la cola de reproduccion",DARK_PURPLE), silent=True)
         queueIndex[idGuild] += 1
         isPlaying[idGuild] = False
+
+#Comando para conectar / Mover el bot a un canal de voz Edit: No deberia ser un comando
+#Funcion para conectar el bot al canal de voz del autor 
+#@elBulloso.command()
+async def conectarse(ctx, channel):
+    idGuild = int(ctx.guild.id)
+    if isInVc[idGuild] == None or not isInVc[idGuild].is_connected():
+        isInVc[idGuild] = await channel.connect()
+        em = discord.Embed(
+            title=f"Conectado a {ctx.author.voice.channel}",
+            description=f"Peticion de union hecha por {ctx.author.mention}",
+            colour=VERDE
+        )
+        em.set_footer(icon_url=elBulloso.user.display_avatar)
+        await ctx.send(embed=em, silent=True)
+        if isInVc[idGuild] == None:
+            await ctx.send(embed=MensajeBasico("A lo bien :middle_finger:","No me pude conectar al canal de voz\nDebe estar en un canal de Voz",ROJO))
+            return
+    else:
+        await isInVc[idGuild].move_to(channel)
 
 @elBulloso.command(
         name="usuarios",
@@ -699,10 +673,14 @@ async def unirse(ctx):
     else:
         await ctx.send(embed=MensajeBasico("Sea serio pa! :clown: ",f'Tiene que estar en un canal de voz para unirme.',ROJO))
 
+# @elBulloso.command(
+#         name="salir",
+#         aliases=["q","Q","SALIR"],
+#         help="Comando usado para desconectar el bot del canal de voz actual.\nEsto eliminara la cola de reproduccion actual."
+# )
 @elBulloso.command(
-        name="salir",
-        aliases=["q","Q","SALIR"],
-        help="Comando usado para desconectar el bot del canal de voz actual.\nEsto eliminara la cola de reproduccion actual."
+    name="salir",
+    description="Comando usado para desconectar el bot del canal de voz actual.\nEsto eliminara la cola de reproduccion actual."
 )
 async def salir(ctx):
     idGuild = int(ctx.guild.id)
@@ -720,8 +698,33 @@ async def salir(ctx):
         await isInVc[idGuild].disconnect()
         isInVc[idGuild] = None
 
-@elBulloso.command(
-        name="play",
+
+async def agregarPlaylistYT(ctx, url, channel):
+    cancion = None
+    opciones = {
+        'quit': True,
+        'extract_flat': True,
+        'playlistend': 50,
+        'noplaylist': False,
+        'format': 'bestaudio/best',
+    }
+
+    with yt_dlp.YoutubeDL(opciones) as ydl:
+        info = ydl.extract_info(url, download=False)
+
+    idGuild = int(ctx.guild.id)
+    for entry in info['entries']:
+        cancion = await asyncio.to_thread(getStream, entry['url'])
+        queue[idGuild].append([cancion, channel])
+
+        if not isPlaying[idGuild]:
+            await reproducir(ctx)
+        else:
+            await ctx.send(embed=embed_Añadido_Queue(ctx, cancion), silent=True)
+    return cancion
+
+
+@elBulloso.command(name="play",
         aliases=["p","P","PLAY"],
         help="Comando para buscar en youtube una cancion con el nombre de la cancion",
         usage="$p link",
@@ -762,10 +765,10 @@ async def play(ctx, *args):
     else:
         #esplaylist = esPlaylistYT(search)
         print(search)
-        if search.startswith("https://www.youtube.com/playlist?list=") == True:
-            cancion = await agregarPlaylistYT(ctx, search, channel)
-        elif search.startswith("https://open.spotify.com/") == True:
-            verificarTokenSpotify()
+        # if search.startswith("https://www.youtube.com/playlist?list=") == True:
+        #     cancion = await agregarPlaylistYT(ctx, search, channel)
+        if search.startswith("https://open.spotify.com/") == True:
+            # verificarTokenSpotify()
             search = search.split('?')[0]     
             #La unica solucion seria poner la busqueda de pl en un segundo subproceso no hay mas manera
             if search.startswith('https://open.spotify.com/playlist/') == True:
@@ -777,17 +780,17 @@ async def play(ctx, *args):
                 #asyncio.threads.to_thread(busquedaPlaylist(ctx, channel, search))
                 #print("Loop despues de busqueda sp ", asyncio.get_running_loop(), " ", asyncio.get_event_loop())
                 cancion = await busquedaPlaylist(ctx, channel, search)
-                print("Spotify playlis, termino la cancion ", cancion['Titulo'])
+                # print("Spotify playlis, termino la cancion ", cancion['Titulo'])
             else:
                 search = search.removeprefix('https://open.spotify.com/intl-es/track/')
 
-                cancion = getStream(buscar(nombreArtiCancionPlaylistTrack(cliente.track(search))))               
+                cancion = await asyncio.to_thread(buscar, nombreArtiCancionPlaylistTrack(cliente.track(search)))            
         elif esUrl(search) == True:
-            cancion = getStream(search)
+            cancion = await asyncio.to_thread(getStream, search)
         else:
-            cancion = getStream(buscar(search))
+            cancion = await asyncio.to_thread(buscar, search)
 
-        if type(cancion) == type(True):
+        if isinstance(cancion, bool):
             await ctx.send(embed=MensajeBasico("Uy cual es esa :rage: ",f"Que mierda buscate sapa {ctx.author.mention}", ROJO), silent=True)
             return
         else:
@@ -797,6 +800,22 @@ async def play(ctx, *args):
                 await reproducir(ctx)
             else:
                 await ctx.send(embed=embed_Añadido_Queue(ctx, cancion), silent=True)
+    voice = ctx.author.voice
+
+    if not voice:
+        await ctx.send(embed=MensajeBasico("A lo bien :middle_finger:","No me pude conectar al canal de voz\nDebe estar en un canal de Voz",ROJO), silent=True)
+        return
+
+    # vc = await voice.channel.connect()
+
+    
+    
+    # await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion=audio_info), silent=True)
+
+    # source = discord.FFmpegPCMAudio(audio_info['url'], **FFMPEG_OPTIONS)
+
+    # vc.play(source, after=lambda e: print('Reproducción terminada', e))
+
 
 @elBulloso.command(
         name="spotify",
@@ -840,32 +859,44 @@ async def spotify(ctx, args):
             await busquedaPlaylist(ctx, channel, search)
         else:
             search = search.removeprefix('https://open.spotify.com/intl-es/track/')
+            try:
+                cancion = getStream(buscar(nombreArtiCancionPlaylistTrack(cliente.track(search))))
 
-            cancion = getStream(buscar(nombreArtiCancionPlaylistTrack(cliente.track(search))))
+                queue[idGuild].append([cancion, channel])
 
-            queue[idGuild].append([cancion, channel])
-
-            if not isPlaying[idGuild]:
-                await reproducir(ctx)
-            else:
-                await ctx.send(embed=embed_Añadido_Queue(ctx, cancion), silent=True)
-            
-
+                if not isPlaying[idGuild]:
+                    await reproducir(ctx)
+                else:
+                    await ctx.send(embed=embed_Añadido_Queue(ctx, cancion), silent=True)
+            except Exception as e:
+                await ctx.send(embed=MensajeBasico("El Token de Spotify Expiro 😶‍🌫️", ROJO))
 
 
 
 @elBulloso.event
 async def on_ready():
+    # try:
+    # #   print(token)
+    #     cliente = spotipy.Spotify(auth=token)
+    #     user_name = cliente.current_user() 
+    # except:
+    #     print("Fallo token SpotiPy")
+    # else:
+    #     #print(json.dumps(user_name, sort_keys=True, indent=4))
+    #     #print(f'token: {token}')
+    #     print('token correcto Spotipy')
+
+    cliente = spotipy.Spotify(auth_manager=auth_manager)
+
     try:
-    #   print(token)
-        cliente = spotipy.Spotify(auth=token)
+        #print(token)
         user_name = cliente.current_user() 
     except:
-        print("Fallo token SpotiPy")
+        print("Fallo token")
     else:
         #print(json.dumps(user_name, sort_keys=True, indent=4))
         #print(f'token: {token}')
-        print('token correcto Spotipy')
+        print('token correcto SpotiPy')
     
     #members = elBulloso.get_all_members() #Obtiene todos los usuarios que ve el bot y los guarda en members
     for guild in elBulloso.guilds:
@@ -876,6 +907,7 @@ async def on_ready():
         isPlaying[idGuild] = False
         isPaused[idGuild] = False
     #print(elBulloso.user.mention)
+    await elBulloso.tree.sync()
     print(f'Inicializando como {elBulloso.user}, SpotifyUsr: {user_name['display_name']}')
 
 #Listener para que el bot se desconecte al momento que no hallan usuarios en el canal de voz actual del bot.
@@ -891,5 +923,3 @@ async def on_voice_state_update(member, before, after):
             await isInVc[idGuild].disconnect()
 
 elBulloso.run(tokenBot)
-
-#Id: 410172721520181248 Nombre: sebax

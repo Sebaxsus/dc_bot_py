@@ -14,7 +14,6 @@ import os
 #from youtube_dl import YoutubeDL
 import asyncio, functools
 from yt_dlp import YoutubeDL
-from youtubesearchpython import VideosSearch
 
 
 #Variables para spotipy
@@ -93,12 +92,15 @@ isInVc = {}
 #FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 
-YTDL_OPTIONS = {'format': 'bestaudio/best',
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '192',
-    }]
+YTDL_OPTIONS = {
+    'format': 'bestaudio/best', # Selecciono el mejor formato de audio disponible
+    'quiet': True, # Silencia el log de yt_dlp
+    'no_warnings': True, # Silencia las advertencias en consola de yt_dlp
+    'skip_download': True, # No descarga el archivo
+    'default_search': 'ytsearch',
+    'extract_flat': False,
+    'noplaylist': True,
+    'default_search': 'ytsearch3',
 }
 FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
@@ -257,29 +259,19 @@ def buscar(search):
     return "https://www.youtube.com/watch?v=" + pytube.Search(search).results[0].video_id 
 
 #Funcion para extraer el audio/cancion de el resultado de busqueda en $play
-def extraerCancion(url):
-    codeUrl = url.removeprefix("https://www.youtube.com/watch?v=")
-    print(codeUrl)
+def buscar_y_extraer_info(query):
     with YoutubeDL(YTDL_OPTIONS) as ydl:
-        try:
-            raw = ydl.extract_info(codeUrl, download=False)["title"]
-        except:
-            return False
-    search = VideosSearch(url, limit= 1)
-    #print(search.result())
-    #print(search.result()["result"][0]["channel"]["name"], " Espacio ", search.result()["result"][0]["accessibility"]["duration"])
-    #print("\nSeparador\n")
-    #print(search.result()["result"][0])
-    #print("\nSeparador\n")
-    #print(search.result()["result"][0]["link"])
-    return {
-        'link': url,
-        'Miniatura': 'https://i.ytimg.com/vi/' + codeUrl + '/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig',
-        'Source': search.result()["result"][0]["link"],
-        'Titulo': search.result()["result"][0]["title"],
-        'Canal' : search.result()["result"][0]["channel"]["name"],
-        'Duracion' : search.result()["result"][0]["duration"]
-    }
+        info = ydl.extract_info(query, download=False)
+        if 'entries' in info:
+            info = info['entries'][0]
+        return {
+            'url': info['url'],
+            'titulo': info['title'],
+            'canal': info['uploader'],
+            'duracion': str(int(info['duration'] / 60)) + ':' + str(info['duration'] % 60).zfill(2),
+            'miniatura': info.get('thumbnail', ''),
+            'pagina': info.get('webpage_url', '')
+        }
 
 #funcion que lee el mensaje y busca eso mismo en youtube
 #def buscar(search):

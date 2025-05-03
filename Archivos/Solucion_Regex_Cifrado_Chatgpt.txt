@@ -1,0 +1,259 @@
+#solución github
+https://github.com/pytube/pytube/issues/1954#issuecomment-2218287594
+https://www.youtube.com/watch?v=QCvxxurNriE
+https://github.com/pytube/pytube/issues/2008#issue-2458385419
+Pregunta>:
+
+
+
+Hola de nuevo, Resulta que el Error de antes "Traceback (most recent call last):
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\__main__.py", line 181, in fmt_streams
+    extract.apply_signature(stream_manifest, self.vid_info, self.js)
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\extract.py", line 409, in apply_signature
+    cipher = Cipher(js=js)
+             ^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\cipher.py", line 43, in __init__
+    self.throttling_plan = get_throttling_plan(js)
+                           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\cipher.py", line 405, in get_throttling_plan
+    raw_code = get_throttling_function_code(js)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\cipher.py", line 311, in get_throttling_function_code
+    name = re.escape(get_throttling_function_name(js))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\cipher.py", line 296, in get_throttling_function_name
+    raise RegexMatchError(
+pytube.exceptions.RegexMatchError: get_throttling_function_name: could not find match for multiple
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\discord\ext\commands\core.py", line 235, in wrapped
+    ret = await coro(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\sebax\Desktop\Universidad\Proyectos_aleatorios\bot_dc_py\src\bot.py", line 782, in play
+    cancion = getStream(buscar(search))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\sebax\Desktop\Universidad\Proyectos_aleatorios\bot_dc_py\src\bot.py", line 219, in getStream
+    audio_stream = yt.streams.filter(only_audio=True).first()
+                   ^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\__main__.py", line 296, in streams
+    return StreamQuery(self.fmt_streams)
+                       ^^^^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\__main__.py", line 188, in fmt_streams
+    extract.apply_signature(stream_manifest, self.vid_info, self.js)
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\extract.py", line 409, in apply_signature
+    cipher = Cipher(js=js)
+             ^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\cipher.py", line 43, in __init__
+    self.throttling_plan = get_throttling_plan(js)
+                           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\cipher.py", line 405, in get_throttling_plan
+    raw_code = get_throttling_function_code(js)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\cipher.py", line 311, in get_throttling_function_code
+    name = re.escape(get_throttling_function_name(js))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\pytube\cipher.py", line 296, in get_throttling_function_name
+    raise RegexMatchError(
+pytube.exceptions.RegexMatchError: get_throttling_function_name: could not find match for multiple
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\discord\ext\commands\bot.py", line 1350, in invoke
+    await ctx.command.invoke(ctx)
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\discord\ext\commands\core.py", line 1029, in invoke
+    await injected(*ctx.args, **ctx.kwargs)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sebax\AppData\Local\Programs\Python\Python312\Lib\site-packages\discord\ext\commands\core.py", line 244, in wrapped
+    raise CommandInvokeError(exc) from exc
+discord.ext.commands.errors.CommandInvokeError: Command raised an exception: RegexMatchError: get_throttling_function_name: could not find match for multiple"
+Era causao por el metodo get_throttling_function_name en el modulo cypher de pytube debido a su patron de regex r'a\.[a-zA-Z]\s*&&\s*\([a-z]\s*=\s*a\.get\("n"\)\)\s*&&\s*', r'\([a-z]\s*=\s*([a-zA-Z0-9$]+)(\[\d+\])?\([a-z]\)'. Y este nuevo patron lo soluciono "'ra\.[a-zA-Z]\s*&&\s*\([a-z]\s*=\s*a\.get\("n"\)\)\s*&&.*?\|\|\s*([a-z]+)',r'\([a-z]\s*=\s*([a-zA-Z0-9$]+)(\[\d+\])?\([a-z]\)',r'\([a-z]\s*=\s*([a-zA-Z0-9$]+)(\[\d+\])\([a-z]\)'," Porque y cual es su diferencia
+
+
+
+
+
+######################### Respuesta
+
+
+
+
+
+
+
+¡Qué bueno que hayas identificado una solución! El problema que mencionas está relacionado con la manera en que YouTube cambia su código JavaScript para evitar que herramientas como `pytube` accedan a sus recursos fácilmente. Específicamente, el error ocurre cuando `pytube` intenta analizar y aplicar firmas (firmas digitales o cifrados) utilizando expresiones regulares (regex) en el código JavaScript de YouTube.
+
+### Explicación del Problema
+
+En este caso, el método `get_throttling_function_name` en el archivo `cipher.py` intenta encontrar la función de "estrangulamiento" o limitación (throttling) en el código JavaScript que YouTube utiliza para restringir la descarga masiva o el uso no autorizado de contenido. YouTube cambia regularmente la estructura de su código, lo que hace que las expresiones regulares que antes funcionaban dejen de coincidir con el nuevo patrón del código.
+
+### Diferencia entre los Patrones de Regex
+
+1. **Patrón Original:**
+   ```python
+   r'a\.[a-zA-Z]\s*&&\s*\([a-z]\s*=\s*a\.get\("n"\)\)\s*&&\s*', 
+   r'\([a-z]\s*=\s*([a-zA-Z0-9$]+)(\[\d+\])?\([a-z]\)'
+   ```
+   - Este patrón busca coincidencias en el código JavaScript basadas en condiciones lógicas y estructuras comunes que existían en versiones anteriores del código de YouTube.
+   - Por ejemplo, el primer patrón `r'a\.[a-zA-Z]\s*&&\s*\([a-z]\s*=\s*a\.get\("n"\)\)\s*&&\s*'` está buscando algo como `a.[letra] && (letra = a.get("n")) &&`.
+   - El segundo patrón busca una estructura que se parece a `([a-zA-Z0-9$]+)(\[\d+\])?\([a-z]\)`, una expresión que puede ser una función con un nombre alfanumérico y posiblemente con índices.
+
+2. **Nuevo Patrón:**
+   ```python
+   'ra\.[a-zA-Z]\s*&&\s*\([a-z]\s*=\s*a\.get\("n"\)\)\s*&&.*?\|\|\s*([a-z]+)',
+   r'\([a-z]\s*=\s*([a-zA-Z0-9$]+)(\[\d+\])?\([a-z]\)',
+   r'\([a-z]\s*=\s*([a-zA-Z0-9$]+)(\[\d+\])\([a-z]\)'
+   ```
+   - El nuevo patrón hace algo similar, pero incluye un ajuste importante para adaptarse a los cambios recientes en el código de YouTube.
+   - El primer patrón ahora incluye `.*?\|\|\s*([a-z]+)` que busca una coincidencia antes del operador lógico "||" (OR) en el código JavaScript. Esto probablemente se debe a que YouTube ha añadido más complejidad en el flujo lógico de su código.
+   - El segundo y tercer patrón son variaciones del mismo principio, pero ahora se asegura de manejar mejor las estructuras con índices y llamadas a funciones, como `([a-zA-Z0-9$]+)(\[\d+\])\([a-z]\)`.
+
+### ¿Por Qué Funciona el Nuevo Patrón?
+
+- **Adaptabilidad al Código Actual:** El nuevo patrón es más flexible y está diseñado para ajustarse a la nueva forma en la que YouTube estructura sus funciones de estrangulamiento en su JavaScript. YouTube a menudo introduce nuevas condiciones lógicas y cambios menores en sus scripts, y el nuevo patrón es capaz de reconocer estas variaciones (como el uso del operador "||").
+- **Manejo de Variaciones en el Código:** El nuevo patrón incluye múltiples coincidencias posibles, lo que lo hace más robusto frente a pequeños cambios en el código de YouTube. Esto reduce la probabilidad de errores de coincidencia (como los errores de índice o de firma).
+  
+### Resumen
+
+El patrón antiguo estaba diseñado para coincidir con una versión específica del código JavaScript de YouTube. Cuando YouTube cambió su código, el patrón anterior dejó de coincidir, causando un error. El nuevo patrón es más flexible y capaz de adaptarse a la estructura actual del código JavaScript de YouTube, lo que resuelve el error.
+
+Si te encuentras con cambios en el código de YouTube en el futuro, probablemente tendrás que actualizar estos patrones nuevamente para mantener `pytube` funcional.
+
+
+
+
+
+
+
+
+
+##################################Pregunta
+
+
+
+
+
+Como hago para modificar mi metodo de aplicado de firmas digitales usando regex en el caso de que se vuelva a cambiar en un futuro
+
+
+
+
+
+
+
+############ Respuesta
+
+
+
+
+
+
+
+
+
+
+
+Modificar el método que aplica firmas digitales mediante expresiones regulares (regex) en `pytube` para que sea más adaptable a futuros cambios es un desafío recurrente debido a que YouTube modifica periódicamente su código JavaScript. Aquí tienes una estrategia paso a paso para facilitar la adaptación del método a cambios futuros:
+
+### 1. **Identificación Dinámica del Código JavaScript**
+
+Dado que el método que buscas modificar depende de extraer y aplicar firmas digitales del código JavaScript de YouTube, lo más importante es ser capaz de identificar dinámicamente los cambios que YouTube hace en su código.
+
+- **Monitorea las Funciones Críticas**: Identifica cuáles son las funciones JavaScript clave que YouTube usa para firmar o cifrar los streams (como `apply_signature`). Puedes lograr esto inspeccionando manualmente el código fuente de YouTube y buscando los puntos donde se manipulan los tokens o URLs de los videos.
+
+### 2. **Implementar un Sistema de Respaldo de Regex**
+
+Puedes implementar una lógica de "fallback" o de respaldo para manejar diferentes versiones de patrones regex que se puedan adaptar a los cambios en el código.
+
+```python
+def apply_signature_with_fallback(js, stream_manifest, vid_info):
+    # Lista de patrones de regex
+    patterns = [
+        (r'ra\.[a-zA-Z]\s*&&\s*\([a-z]\s*=\s*a\.get\("n"\)\)\s*&&.*?\|\|\s*([a-z]+)', ...),
+        (r'\([a-z]\s*=\s*([a-zA-Z0-9$]+)(\[\d+\])?\([a-z]\)', ...),
+        # Agrega patrones adicionales aquí
+    ]
+
+    for pattern, handler in patterns:
+        try:
+            # Intenta aplicar la firma usando el patrón actual
+            match = re.search(pattern, js)
+            if match:
+                return handler(match)
+        except RegexMatchError as e:
+            continue  # Si falla, intenta el siguiente patrón
+
+    raise RegexMatchError("No se pudo encontrar ningún patrón compatible")
+```
+
+- **Múltiples Patrones**: Como ves, esta lógica recorre una lista de patrones de regex diferentes. Si un patrón falla (por ejemplo, YouTube ha cambiado su código), el método intentará aplicar el siguiente patrón.
+- **Lógica de Respaldo**: Esto asegura que si YouTube cambia su código, es posible que uno de los patrones de respaldo siga funcionando.
+
+### 3. **Registro de Errores y Notificaciones**
+
+Implementar un sistema de registro de errores (logging) para detectar cuándo y por qué una firma digital deja de aplicarse correctamente. Esto te permite identificar los cambios y adaptarte más rápidamente.
+
+```python
+import logging
+
+# Configuración del logger
+logging.basicConfig(level=logging.INFO, filename='pytube_signature_errors.log')
+
+def apply_signature(js, stream_manifest, vid_info):
+    try:
+        cipher = Cipher(js=js)
+        stream_manifest = cipher.apply(stream_manifest)
+        return stream_manifest
+    except RegexMatchError as e:
+        logging.error(f"Error aplicando firma: {str(e)}")
+        raise
+```
+
+### 4. **Ajuste Manual del Patrón**
+
+Cuando ocurra un cambio en el código de YouTube que no puede ser manejado automáticamente, deberás inspeccionar manualmente el JavaScript de YouTube para identificar la nueva estructura del código.
+
+- **Uso de Herramientas del Navegador**: Utiliza las herramientas de desarrollo de tu navegador para inspeccionar el código de las páginas de YouTube. Busca las funciones que manipulan las firmas digitales y ajusta tus patrones regex basándote en el nuevo código.
+- **Comparar Código Antiguo y Nuevo**: Puedes comparar el código JavaScript antiguo con el nuevo utilizando un comparador de diferencias (diff) para identificar qué cambió.
+
+### 5. **Automatizar la Extracción de Patrón**
+
+Si deseas automatizar aún más el proceso, puedes escribir un script que intente detectar automáticamente el código de la función de estrangulamiento o firma en el archivo JavaScript de YouTube.
+
+```python
+def detect_cipher_function(js_code):
+    # Ejemplo simple para intentar detectar patrones basados en la estructura
+    cipher_patterns = [
+        r'\b[a-z]\.set\("signature"\)',
+        r'\b[a-zA-Z]\.get\("signature"\)',
+        r'function\s*\w+\s*\(\s*\w+\s*\)\s*\{.*?\breturn\b'
+    ]
+    
+    for pattern in cipher_patterns:
+        match = re.search(pattern, js_code)
+        if match:
+            return match.group(0)  # Retorna el nombre o el bloque de la función
+    return None
+```
+
+Este enfoque puede ser bastante limitado, ya que YouTube puede cambiar radicalmente su código, pero puede ayudarte a identificar automáticamente funciones clave.
+
+### 6. **Mantener `pytube` Actualizado**
+
+Por último, recuerda mantener `pytube` actualizado, ya que la comunidad y los desarrolladores a menudo reaccionan rápidamente a los cambios que YouTube implementa. Actualiza la librería a través de `pip` regularmente para asegurarte de que tu versión incluya las últimas correcciones.
+
+```bash
+pip install --upgrade pytube
+```
+
+### Conclusión
+
+Para adaptarte a futuros cambios en la estructura de cifrado o firmas digitales de YouTube, puedes implementar una lógica flexible que pruebe múltiples patrones de regex, mantener un registro de errores detallado y monitorear el código de YouTube. Aunque el ajuste manual seguirá siendo necesario en algunos casos, automatizar partes del proceso puede reducir el esfuerzo cuando YouTube actualiza su código.
+
+
+
+
+
+
