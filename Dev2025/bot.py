@@ -1,7 +1,13 @@
 import discord 
 from discord import app_commands
 from discord.ext import commands
-import spotipy, dotenv, yt_dlp, asyncio, functools, datetime
+import spotipy, dotenv, yt_dlp, asyncio, functools, datetime, concurrent.futures
+
+import time
+
+## Piscina de Hilos contralados (Yo defino el maximo de hilos)
+
+thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
 
 env = dotenv.dotenv_values("bot_dc_py/src/.env")
@@ -77,6 +83,10 @@ queue = {}
 queueIndex = {}
 #Diccionario con id de la Guild y el status de si esta conectado a un canal de voz o no
 isInVc = {}
+
+# Diccionario global
+autocomplete_cache = {}
+CACHE_TTL = 20  # tiempo en segundos para considerar válida una entrada
 
 #Constant for ytdl_Youtube and FFMPEG
 #YTDL_OPTIONS = {'format': 'bestaudio', 'nonplaylist': 'True'}
@@ -202,8 +212,9 @@ async def busquedaPlaylist(ctx, channel, urlPlaylist):
     func = functools.partial(guardarCancionesSpList, primer_bloque, idGuild, channel)
 
     #Espero a que se resuelva el primero bloque
-    await elBulloso.loop.run_in_executor(None, func=func)
-
+    #await elBulloso.loop.run_in_executor(None, func=func)
+    #await asyncio.to_thread(func)
+    await elBulloso.bot_loop.run_in_executor(thread_pool, func)
     # Reproducir primera cancion en el diccionario queue (cola)
     await reproducir(ctx)
 
@@ -223,7 +234,7 @@ async def busquedaPlaylist(ctx, channel, urlPlaylist):
 
         func = functools.partial(guardarCancionesSpList, bloque, idGuild, channel)
         # El bloque de tareas que se va a guardar en la lista de bloques de tareas
-        tarea = elBulloso.loop.run_in_executor(None, func=func)
+        tarea = elBulloso.bot_loop.run_in_executor(thread_pool, func)
         # Agregando el bloque de tareas a la lista de bloques de tareas
         tareas.append(tarea)
     # Espero a que todas las tareas terminen
@@ -905,8 +916,9 @@ async def siguienteCancion(ctx):
         #await ctx.send(embed= embed_Reproduciendo_Ahora(ctx, cancion))
         #print(f"Source: {cancion['Source']}")
         source = discord.FFmpegPCMAudio(cancion['streamUrl'], **FFMPEG_OPTIONS)
-        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.loop))
-        isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
+        source = discord.PCMVolumeTransformer(source, 0.5)
+        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.bot_loop))
+        #isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
     else:
         queueIndex[idGuild] += 1
         isPlaying[idGuild] = False
@@ -932,12 +944,12 @@ async def reproducir(ctx):
         source = discord.PCMVolumeTransformer(source, 0.5)
         ## ****************************************************************************
 
-        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.loop))
+        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.bot_loop))
         #print(f"Source: {cancion['Source']}")
         #isInVc[idGuild].play(discord.FFmpegPCMAudio(
         #    cancion['Source']), after=lambda e: siguienteCancion(ctx)
         #)
-        isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
+        #isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
         #print("Antes de siguente cancion")
     else:
         await ctx.send(embed=MensajeBasico("Cola Vacia! :melting_face: ","No hay mas canciones en la cola de reproduccion",DARK_PURPLE), silent=True)
@@ -1104,7 +1116,8 @@ def search_youtube(query):
 )
 @app_commands.describe(search="Titulo o enlace de la cancion")
 async def play(ctx: commands.Context, *, search: str = None):
-    search = search or " ".join(search)
+    print("Entro play... Search: ", search)
+    search = search or " "
     idGuild = int(ctx.guild.id)
     #print(type(search), search, search.replace(" ", ""))
     try:
@@ -1138,7 +1151,7 @@ async def play(ctx: commands.Context, *, search: str = None):
             return
     else:
         #esplaylist = esPlaylistYT(search)
-        print(search)
+        print("Precondicion search: ",search)
         # if search.startswith("https://www.youtube.com/playlist?list=") == True:
         #     cancion = await agregarPlaylistYT(ctx, search, channel)
         if search.startswith("https://open.spotify.com/") == True:
@@ -1190,15 +1203,74 @@ async def play(ctx: commands.Context, *, search: str = None):
 
     # vc.play(source, after=lambda e: print('Reproducción terminada', e))
 
+def limpiar_cache():
+    ahora = time.time()
+    try:
+        expirados = [k for k, (t, _) in autocomplete_cache.items() if ahora - t > CACHE_TTL]
+        for k in expirados:
+            del autocomplete_cache[k]
+        print("Limpiado el cache de autocomplete")
+    except Exception as e:
+        print(f"Fallo la Limpieza de el cache: {e}")
+
+def search_youtube_lite_cached(query):
+    now = time.time()
+    print("Entro search_Lite_cached, query", query)
+
+    if query in autocomplete_cache:
+        print(" cached_time: ", {now - autocomplete_cache[query][0]})
+        cached_time, cached_results = autocomplete_cache[query]
+        # Cache TTL es Time To Live
+        if now - cached_time < CACHE_TTL:
+            return cached_results # Cache valido
+
+    # Si no está en cache o está vencido, buscar
+    opciones = {
+        'quiet': True,
+        'skip_download': True,
+        'extract_flat': 'in_playlist',  # evita bajar info del stream
+        'default_search': 'ytsearch5',
+    }
+        # 'forcejson': True,
+        # 'simulate': True,
+
+    with yt_dlp.YoutubeDL(opciones) as ydl:
+        info = ydl.extract_info(query, download=False)
+        entries = info['entries'] if 'entries' in info else [info]
+
+        # Retorna solo lo esencial
+        results = [{
+            'title': entry.get('title'),
+            'uploader': entry.get('uploader'),
+            'id': entry.get('id')
+        } for entry in entries[:4]]
+
+        autocomplete_cache[query] = (now, results)
+        limpiar_cache()
+        return results
+
+
 @play.autocomplete("search")
 async def youtube_autocomplete(interaction: discord.Interaction, current: str):
         if not current or len(current) < 3:
             return []
         
-        results = await asyncio.to_thread(search_youtube, current)
+        # results = await asyncio.to_thread(search_youtube, current)
+
+        try:
+            results = await asyncio.wait_for(
+                asyncio.to_thread(search_youtube_lite_cached, current),
+                timeout=2.5
+            )
+        except asyncio.TimeoutError:
+            return [
+                discord.app_commands.Choice(name="⌛ Buscando...", value="Buscando...")
+            ]
 
         return [
-            discord.app_commands.Choice(name=result['title'][:100], value=result['title']) for result in results[:3]
+            discord.app_commands.Choice(
+                name=f"{result['title']} - {result['uploader']}"[:100],
+                value=result['title']) for result in results[:3]
         ]
 
 
@@ -1274,6 +1346,7 @@ async def on_ready():
     # guild=None limpia comandos globales. Si registras por guild_id, debes limpiar con guild=discord.Object(id=GUILD_ID)
     # elBulloso.tree.clear_commands(guild=None)  # Limpia globales
     # print(f"Comandos actualizados y limpiados.")
+    elBulloso.bot_loop = asyncio.get_running_loop()
 
     cliente = spotipy.Spotify(auth_manager=auth_manager)
 
@@ -1302,7 +1375,7 @@ async def on_ready():
     # except Exception as e:
     #     print(f"Error al sincronizar comandos: {e}")
 
-    print(f'Inicializando como {elBulloso.user}, SpotifyUsr: {user_name['display_name']} \n Intents Activos: {intents}')
+    print(f'Inicializando como {elBulloso.user}, SpotifyUsr: {user_name['display_name']} \n Intents Activos: {intents} - Loop registrado')
 
 #Listener para que el bot se desconecte al momento que no hallan usuarios en el canal de voz actual del bot.
 @elBulloso.listen()
