@@ -56,6 +56,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.all()
+intents = discord.Intents.all()
 
 #Utilizando la funcion commands de discord.ext, se define una descripcion y el comando con el que el bot
 #Va a responder en el chat "command_prefix", Y con commands.when_mentioned_or el bot tambien respondera como prefijo cuadno lo mencionen
@@ -227,7 +228,7 @@ async def busquedaPlaylist(ctx, channel, urlPlaylist):
         tareas.append(tarea)
     # Espero a que todas las tareas terminen
     resultados = await asyncio.gather(*tareas)
-
+    # Devuelvo el ultimo resultado guardado en el ultimo bloque de tareas resuelto
     return resultados[-1] if resultados else None
         
 
@@ -346,107 +347,185 @@ async def mensaje(ctx, cancion):
         return
     
 #El discord.utils.find solo busca los nombres exactos sin alias el nombre de discord
-@elBulloso.command(
-        name="ping",
-        aliases=["PING"],
-        help="Comando para mencionar a un usuario usando su nombre global."
+@elBulloso.hybrid_command(
+    name="ping",
+    description="Usa un nombre global para mencionar a un usuario.",
+    aliases=["PING"],
+    help="Comando para mencionar a un usuario usando su nombre global.",
 )
-async def ping(ctx, *args):
-    nombre = "".join(args)
-    if not args:
+@app_commands.describe(nombre="Nombre exacto del usuario (no el nickname)")
+async def ping(ctx: commands.Context, *, nombre: str = None):
+    if not nombre:
         await ctx.send(f'Pong :ping_pong:')
+        return
+    
+    #La variable user guarda un objecto que genere la funcion find de utils, En otras palbras lo que se guarda en user es un objeto no un string ni nada parecido.
+    user = discord.utils.find(lambda m: m.name.lower() == nombre.lower(), ctx.channel.guild.members)
     #Para manejar un error y usar discord como respuesta al error se debe usar el manejador de errores de discord.ext.commands alias on_command_error() o error().
     #Tambien hay un condicional llamado check usado comunmente para verificar permisos de usuario y si puede usar comandos o no.
-    else:
-        try:
-            #La variable user guarda un objecto que genere la funcion find de utils, En otras palbras lo que se guarda en user es un objeto no un string ni nada parecido.
-            user = discord.utils.find(lambda m: m.name == nombre, ctx.channel.guild.members)
-            print(f"OBjetos o string?: {user}, {user.name}, {type(user)}, {type(user.name)}, {user.id}") #Prueba
-            #tempUserId = None
-            #tempUserName = None
-            tempUserObject = None
-        except:
-            await ctx.send(embed=MensajeBasico("Error al ejecutar $ping :scream:","Usuario No encontrado",DARK_RED), silent=True)
-        else:
-            for m in ctx.channel.guild.members:
-                if user.name in m.name: #busco el usario dentro de todos los usuarios de la guild
-                    #print(m.id, nombre)
-                    #tempUserId = m.id
-                    #tempUserName = m.name
-                    tempUserObject = m
-            await ctx.send(f'Pong {tempUserObject.mention} :ping_pong:') #con los objetos Puedo mencionar, sacarle la info del objeto (User)
+    if not user:
+        await ctx.send(
+            embed=MensajeBasico(
+                "Error :scream:",
+                "Usuario no encontrado",
+                DARK_RED
+            ),
+            silent=True
+        )
+    
+    await ctx.send(
+        f"Pong {user.mention} :ping_pong:"
+    )
+    # else:
+    #     try:
+            
+    #         print(f"OBjetos o string?: {user}, {user.name}, {type(user)}, {type(user.name)}, {user.id}") #Prueba
+    #         #tempUserId = None
+    #         #tempUserName = None
+    #         tempUserObject = None
+    #     except:
+    #         await ctx.send(embed=MensajeBasico("Error al ejecutar $ping :scream:","Usuario No encontrado",DARK_RED), silent=True)
+    #     else:
+    #         for m in ctx.channel.guild.members:
+    #             if user.name in m.name: #busco el usario dentro de todos los usuarios de la guild
+    #                 #print(m.id, nombre)
+    #                 #tempUserId = m.id
+    #                 #tempUserName = m.name
+    #                 tempUserObject = m
+    #         await ctx.send(f'Pong {tempUserObject.mention} :ping_pong:') #con los objetos Puedo mencionar, sacarle la info del objeto (User)
 
 
-@elBulloso.command(
+@elBulloso.hybrid_command(
         name="info",
+        description="Comando que devuelve informacion general del servidor",
         aliases=["INFO"],
-        help = "Este comando manda un mensaje con la informacion del servidor."
+        help = "Este comando manda un mensaje con la informacion del servidor.",
 )
-async def info(ctx):
-    ambed = discord.Embed(title=f'{ctx.guild.name}', description=f"La mierda mas grande jamas vista",timestamp=datetime.datetime.utcnow(), color=discord.colour.Color.dark_blue())
-    ambed.add_field(name="Dueño del server", value=f'{ctx.guild.owner}')
-    #ambed.add_field(name="Region del server", value=f'{ctx.guild.region}') Segun lo visto en la documentacion el metodofo .region de Discord.guild no existe >:(
-    ambed.add_field(name="Id del Servidor", value=f'{ctx.guild.id}')
-    ambed.set_thumbnail(url=f"{ctx.guild.icon}")
-    ambed.set_author(name="sebaxsus")
-    await ctx.send(embed=ambed, silent=True)
+async def info(ctx: commands.Context):
+    embed = discord.Embed(
+        title=f'{ctx.guild.name}',
+        description=f"La mierda mas grande jamas vista {datetime.datetime.now(datetime.timezone.utc)}",
+        timestamp=datetime.datetime.utcnow(),
+        color=DARK_BLUE
+    )
+    embed.add_field(name="Dueño del server", value=f'{ctx.guild.owner}')
+    #embed.add_field(name="Region del server", value=f'{ctx.guild.region}') Segun lo visto en la documentacion el metodofo .region de Discord.guild no existe >:(
+    embed.add_field(name="Id del Servidor", value=f'{ctx.guild.id}')
+    if ctx.guild.icon:
+        embed.set_thumbnail(url=f"{ctx.guild.icon.url}")
+    embed.set_author(name="sebaxsus")
+    await ctx.send(embed=embed, silent=True)
 
-@elBulloso.command(
+@elBulloso.hybrid_command(
     name="cola",
+    description="Muestra las canciones en la cola actual",
     aliases=["c", "C", "COLA"],
-    help="Commando para mostrar la reproduccion de la cola."
+    help="Commando para mostrar las canciones en la cola actual.",
 )
-async def cola(ctx):
+async def cola(ctx: commands.Context):
     idGuild = int(ctx.guild.id)
-    returnVaule = ""
-    miniatura = queue[idGuild][queueIndex[idGuild]][0]['Miniatura']
+
+    if not queue[idGuild]:
+        colaEmbed = discord.Embed(
+            title="Cola de Reproduccion",
+            description="No hay canciones en la cola",
+            colour=0x2c76dd
+        )
+
+        await ctx.send(
+            embed=colaEmbed,
+            silent=True
+        )
+        return
+    
     colaEmbed = discord.Embed(
-        title="Cola de Reproduccion",
-        description=returnVaule,
-        colour=0x2c76dd
+        title="Cola de Reproducción",
+        colour=AZUL
     )
+    miniatura = queue[queueIndex[idGuild]][0]['Miniatura']
     colaEmbed.set_thumbnail(url=miniatura)
-    if queue[idGuild] == []:
-        colaEmbed.clear_fields()
-        colaEmbed.add_field(name="Cola Vacia",value="No hay canciones el la cola de reproducion.")
-    else:
-        for i in range(queueIndex[idGuild], len(queue[idGuild])):
-            upNextSongs = len(queue[idGuild]) - queueIndex[idGuild]
-            if i > 5 + upNextSongs:
-                break
-            returnIndex = i - queueIndex[idGuild]
-            if returnIndex == 0:
-                returnIndex = "Escuchando"
-            elif returnIndex == 1:
-                returnIndex = "Siguente"
-            colaEmbed.add_field(name=f"{returnIndex}", value=f"[{queue[idGuild][i][0]['Titulo']}]({queue[idGuild][i][0]['link']})\n- {queue[idGuild][i][0]['Canal']} {queue[idGuild][i][0]['Duracion']}", inline=False)
-            returnVaule += f"{returnIndex} - [{queue[idGuild][i][0]['Titulo']}]({queue[idGuild][i][0]['link']}) - {queue[idGuild][i][0]['Canal']} {queue[idGuild][i][0]['Duracion']}"
 
-            if returnVaule == "":
-                colaEmbed.clear_fields()
-                colaEmbed.add_field(name="Cola Vacia",value="No hay canciones el la cola de reproducion.")
-    await ctx.send(embed=colaEmbed, silent=True)
+    maxRange = min(len(queue[idGuild]), 20)
+    totalSongs = len(queue[idGuild])
 
-@elBulloso.command(
-    name="limpiar",
-    aliases=["l", "L", "LIMPIAR"],
-    help="Commando para limpiear/Eliminar la cola de reproduccion."
-)
-async def limpiar(ctx):
-    idGuild = int(ctx.guild.id)
-    usuario = ctx.author
-    pfp = usuario.display_avatar
-    embedClear = discord.Embed(
-        title="Cola de reproduccion Limpiada!",
-        description=f'Se quitaron correctamente de la cola de reproduccion todas las canciones',
-        colour=0x0eaa51
+    for i in range(queueIndex[idGuild], maxRange):
+        returnIndex = i - queueIndex[idGuild]
+        titulo = "Escuchando" if returnIndex == 0 else ("Siguiente" if returnIndex == 1 else f"{returnIndex}")
+        cancion = queue[idGuild][i][0]
+        colaEmbed.add_field(
+            name=titulo,
+            value=f"[{cancion['Titulo']}]({cancion['link']})\n- {cancion['Canal']} {cancion['Duration']}",
+            inline=False
+        )
+
+    colaEmbed.add_field(name="Total de canciones en cola", value=f"{totalSongs}")
+    await ctx.send(
+        embed=colaEmbed,
+        silent=True
     )
-    embedClear.set_footer(text=f'Peticion de: {str(usuario)}', icon_url=pfp)
+
+    # returnVaule = ""
+    # miniatura = queue[idGuild][queueIndex[idGuild]][0]['Miniatura']
+    # colaEmbed = discord.Embed(
+    #     title="Cola de Reproduccion",
+    #     description=returnVaule,
+    #     colour=0x2c76dd
+    # )
+    # colaEmbed.set_thumbnail(url=miniatura)
+    # if queue[idGuild] == []:
+    #     colaEmbed.clear_fields()
+    #     colaEmbed.add_field(name="Cola Vacia",value="No hay canciones el la cola de reproducion.")
+    # else:
+    #     print(f"Verificando las canciones en cola...\nqueueDict: {queue[idGuild]}, queueIndexDic: {queueIndex[idGuild]}")
+    #     # In embeds.0.fields: Must be 25 or fewer in length. |||| Este es el mensaje de error cuando la cola es muy grande
+    #     if len(queue[idGuild]) >= 20:
+    #         maxRange = 20
+    #         totalSongs = len(queue[idGuild])
+    #     for i in range(queueIndex[idGuild], maxRange):
+    #         upNextSongs = len(queue[idGuild]) - queueIndex[idGuild]
+    #         if i > 5 + upNextSongs:
+    #             break
+    #         returnIndex = i - queueIndex[idGuild]
+    #         # Condicional para establecer el Titulo del embed de la cola con Escuchando para la primera cancion 
+    #         # y Siguiente para la segunda cancion en la lista cola de reproduccion
+    #         if returnIndex == 0:
+    #             returnIndex = "Escuchando"
+    #         elif returnIndex == 1:
+    #             returnIndex = "Siguente"
+    #         colaEmbed.add_field(name=f"{returnIndex}", value=f"[{queue[idGuild][i][0]['Titulo']}]({queue[idGuild][i][0]['link']})\n- {queue[idGuild][i][0]['Canal']} {queue[idGuild][i][0]['Duracion']}", inline=False)
+    #         returnVaule += f"{returnIndex} - [{queue[idGuild][i][0]['Titulo']}]({queue[idGuild][i][0]['link']}) - {queue[idGuild][i][0]['Canal']} {queue[idGuild][i][0]['Duracion']}"
+
+    #         if returnVaule == "":
+    #             colaEmbed.clear_fields()
+    #             colaEmbed.add_field(name="Cola Vacia",value="No hay canciones el la cola de reproducion.")
+    #     colaEmbed.add_field(name="Total de canciones en Cola!", value=f"Hay un total de {totalSongs}")
+    # await ctx.send(embed=colaEmbed, silent=True)
+
+@elBulloso.hybrid_command(
+    name="limpiar",
+    description="Elimina todas las canciones de la cola excepto la que está sonando.",
+    aliases=["l", "L", "LIMPIAR"],
+    help="Commando para limpiear/Eliminar la cola de reproduccion.",
+)
+async def limpiar(ctx: commands.Context):
+    idGuild = int(ctx.guild.id)
+
+    usuario = ctx.author
+
+    pfp = usuario.display_avatar
     #if isInVc != None and isPlaying[idGuild]:
         #isPlaying[idGuild] = False
         #isPaused[idGuild] = False
         #isInVc[idGuild].pause()
-    if queue[idGuild] != []:
+    if queue[idGuild]:
+
+        embedClear = discord.Embed(
+            title="Cola de reproduccion Limpiada!",
+            description=f'Se quitaron correctamente de la cola de reproduccion todas las canciones',
+            colour=DARK_PURPLE
+        )
+        embedClear.set_footer(text=f'Peticion de: {str(usuario)}', icon_url=pfp)
+
         await ctx.send(embed=embedClear, silent=True)
         #print(f'Cola actual: {queue[idGuild]}\nCancion Cola en reproduccion {queue[idGuild][0]}')     
         del (queue[idGuild])[1:]
@@ -454,113 +533,362 @@ async def limpiar(ctx):
         #queue[idGuild] = []
     queueIndex[idGuild] = 0
 
-@elBulloso.command(
+@elBulloso.hybrid_command(
         name="eliminar",
+        description="Quita la última canción agregada a la cola.",
         aliases=["rm", "RM", "ELIMINAR"],
-        help="Este comando elimina la ultima cancion agregada a la cola de reproduccion."
+        help="Este comando elimina la ultima cancion agregada a la cola de reproduccion.",
 )
-async def eliminar(ctx):
+@app_commands.describe(cancion="Elige una cancion de la cola")
+async def eliminar(ctx: commands.Context, cancion: str = None):
     idGuild = int(ctx.guild.id)
-    if queue[idGuild] != []:
+
+    # await ctx.send(
+    #     embed=embed_Eliminado_Queue(ctx, cancion),
+    #     silent=True
+    # )
+    # queue[idGuild] = queue[idGuild][:-1]
+
+    if not queue[idGuild]:
+        await ctx.send(
+            embed=MensajeBasico(
+                "No se pudo Eliminar :melting_face: ",
+                "No hay canciones en la cola de reproduccion.",
+                DARK_RED
+            ),
+            silent=True
+        )
+        return
+    
+    if cancion is None:
         cancion = queue[idGuild][-1][0]
-        await ctx.send(embed=embed_Eliminado_Queue(ctx, cancion), silent=True)
-    else:
-        await ctx.send(embed=MensajeBasico("No se pudo Eliminar :melting_face: ","No hay canciones en la cola de reproduccion.",DARK_RED), silent=True)
-    queue[idGuild] = queue[idGuild][:-1]
-    if queue[idGuild] == []:
-        if isInVc[idGuild] != None and isPlaying[idGuild]:
-            isPlaying[idGuild] = isPaused[idGuild] = False
-            isInVc.disconnect()
-            isInVc[idGuild] = None
+
+    index = next((i for i, item in enumerate(queue[idGuild]) if item[0]['Title'] == cancion), None )
+
+    if index is None:
+        await ctx.send("❌ Canción no encontrada en la cola.")
+        return
+    
+    eliminada = queue[idGuild].pop(index)
+    await ctx.send(
+        embed=embed_Eliminado_Queue(ctx, eliminada[0]),
+        silent=True
+    )
+
+    if not queue[idGuild] and isInVc[idGuild]:
+        
+        await isInVc[idGuild].disconnect()
+
+        isInVc[idGuild] = None
+        
+        isPlaying[idGuild] = isPaused[idGuild] = False
+
         queueIndex[idGuild] = 0
-    elif queueIndex[idGuild] == len(queue[idGuild]) and isInVc[idGuild] != None and isInVc[idGuild]:
-        isInVc.pause()
+
+    elif queueIndex[idGuild] == len(queue[idGuild]):
+
+        isInVc[idGuild].pause()
         queueIndex[idGuild] -= 1
+
         await reproducir(ctx)
 
+@eliminar.autocomplete("cancion")
+async def eliminar_autocomplete(interaction: discord.Interaction, current: str):
+    idGuild = interaction.guild.id
 
-@elBulloso.command(
+    if not queue[idGuild]:
+        return []
+    
+    canciones = [item[0]['Titulo'] for item in queue[idGuild]]
+
+    resultados = [c for c in canciones if current.lower() in c.lower()][:25]
+    return [discord.app_commands.Choice(name=title, value=title) for title in resultados]
+
+@elBulloso.hybrid_command(
     name="pause",
+    description="Detiene la reproducción sin borrarla.",
     aliases=["d", "pa", "PAUSE", "PA", "STOP", "stop", "D"],
-    help="Commando para detener la reproduccion de la cola."
+    help="Commando para detener la cancion actual.",
 )
-async def pause(ctx):
+async def pause(ctx: commands.Context):
     idGuild = int(ctx.guild.id)
+
     if not isInVc[idGuild]:
-        await ctx.send(embed=MensajeBasico("No se pudo Pausar :face_exhaling: ","No se puede pausar una cancion\nSi no estoy en un chat de voz.",ROJO), silent=True)
+        await ctx.send(
+            embed=MensajeBasico(
+                "No se pudo Pausar :face_exhaling: ",
+                "No se puede pausar una cancion\nSi no estoy en un chat de voz.",
+                ROJO
+            ),
+            silent=True
+        )
+
     elif isPlaying[idGuild]:
-        await ctx.send(embed=MensajeBasico("Pausando! :sleeping: ","Pausando la cancion!.",DARK_GREEN), silent=True)
+
+        await ctx.send(
+            embed=MensajeBasico(
+                "Pausando! :sleeping: ",
+                "Pausando la cancion!.",
+                DARK_GREEN
+            ),
+            silent=True
+        )
         isPlaying[idGuild] = False
         isPaused[idGuild] = True
         isInVc[idGuild].pause()
 
-@elBulloso.command(
+@elBulloso.hybrid_command(
     name="resume",
+    description="Continúa la canción que estaba pausada.",
     aliases=["r", "RESUME", "R"],
-    help="Commando para volver a reproducir una cancion pausada"
+    help="Commando para volver a reproducir una cancion pausada",
 )
-async def resume(ctx):
+async def resume(ctx: commands.Context):
     print("Resumiendo...")
     idGuild = int(ctx.guild.id)
+
     if not isInVc[idGuild]:
-        await ctx.send(embed=MensajeBasico("No se pudo reanudar :nerd: ","No hay canciones por reproducir.",ROJO), silent=True)
+        await ctx.send(
+            embed=MensajeBasico(
+                "No se pudo reanudar :nerd: ",
+                "No hay canciones por reproducir.",
+                ROJO
+            ),
+            silent=True
+        )
     elif isPaused[idGuild]:
-        await ctx.send(embed=MensajeBasico("Reanudando! :upside_down: ","Reanudando la cancion!.",DARK_GREEN), silent=True)
+        await ctx.send(
+            embed=MensajeBasico(
+                "Reanudando! :upside_down: ",
+                "Reanudando la cancion!.",
+                DARK_GREEN
+            ),
+            silent=True
+        )
         isPlaying[idGuild] = True
         isPaused[idGuild] = False
         isInVc[idGuild].resume()
 
-@elBulloso.command(
+@elBulloso.hybrid_command(
     name="skip",
+    description="Salta la canción actual o varias si se especifica una en la cola.",
     aliases=["s", "S", "SKIP"],
-    help="Commando para saltar a la siguente cancion en la cola de reproducion"
+    help="Commando para saltar a la siguente cancion en la cola de reproducion",
 )
-async def skip(ctx, *arg):
+@app_commands.describe(cancion="Cancion a la que quieres saltar!")
+async def skip(ctx: commands.Context, cancion: str = None):
     #print("".join(arg))
-    arg = " ".join(arg)
+    # arg = " ".join(arg)
     #print(not arg, type(arg), arg == type(arg))
-    idGuild = int(ctx.guild.id)
-    #cancion = queue[idGuild][queueIndex[idGuild]][0]
-    if isInVc[idGuild] == None:
-        await ctx.send(ctx.author.mention,embed=MensajeBasico("No se pudo skipear :nerd: ",f"{ctx.author.mention} El bulloso Necesita estar en un canal de voz para usar ester comando!",DARK_RED), silent=True)
-    elif queueIndex[idGuild] >= len(queue[idGuild]) - 1:
-        await ctx.send(embed=MensajeBasico("Saltando la cancion :face_with_diagonal_mouth: ","No hay mas canciones en la cola de reproducion\n\n\tQuitando La cancion",DARK_BLUE), silent=True)
-        isInVc[idGuild].stop()
-        await siguienteCancion(ctx)
-        #await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
-    elif not arg:
-        if isInVc[idGuild] != None and isInVc[idGuild]:
-            isInVc[idGuild].pause()
-            queueIndex[idGuild] += 1
-            await reproducir(ctx)
-    else:
-        if int(arg) > len(queue[idGuild]):
-            await ctx.send(embed=MensajeBasico("No hay canciones en la cola! :dizzy_face:",f"No puede saltar mas canciones de las que hay en la cola\nCanciones en cola: {len(queue[idGuild])}",DARK_PURPLE), silent=True)
-        else:
-            if isInVc[idGuild] != None and isInVc[idGuild]:
-                isInVc[idGuild].pause()
-                queueIndex[idGuild] += int(arg)
-                await reproducir(ctx)
 
-@elBulloso.command(
+    idGuild = int(ctx.guild.id)
+
+    #cancion = queue[idGuild][queueIndex[idGuild]][0]
+    if isInVc[idGuild] == None:
+        await ctx.send(
+            ctx.author.mention,
+            embed=MensajeBasico(
+                "No se pudo skipear :nerd: ",
+                f"{ctx.author.mention} El bulloso Necesita estar en un canal de voz para usar ester comando!",
+                DARK_RED
+            ),
+            silent=True
+        )
+        return
+    
+    if not queue[idGuild] or queueIndex[idGuild] >= len(queue[idGuild]):
+        await ctx.send(
+            embed=MensajeBasico(
+                "No hay canciones en la cola! :dizzy_face:",
+                f"No puede saltar mas canciones de las que hay en la cola\nCanciones en cola: {len(queue[idGuild])}",
+                DARK_PURPLE
+            ),
+            silent=True
+        )
+        return
+    
+    # Skip a una cancion en especifico
+    if cancion is not None:
+        index = int(cancion)
+        if index >= len(queue[idGuild]) or index <= queueIndex[idGuild]:
+            await ctx.send(
+                embed=MensajeBasico(
+                    "Indice de canción no válido o ya reproducido! :dizzy_face:",
+                    f"No puede saltar mas canciones de las que hay en la cola\nCanciones en cola: {len(queue[idGuild])}",
+                    DARK_PURPLE
+                ),
+                silent=True
+            )
+            return
+        
+        queueIndex[idGuild] = index
+    else:
+        queueIndex[idGuild] += 1
+
+    isInVc[idGuild].pause()
+    await reproducir(ctx)
+    
+    # if not queue[idGuild] or queueIndex[idGuild] >= len(queue[idGuild]) - 1:
+    #     await ctx.send(
+    #         embed=MensajeBasico(
+    #             "Saltando la cancion :face_with_diagonal_mouth: ",
+    #             "No hay mas canciones en la cola de reproducion\n\n\tQuitando La cancion",
+    #             DARK_BLUE
+    #         ),
+    #         silent=True
+    #     )
+    #     isInVc[idGuild].stop()
+    #     await siguienteCancion(ctx)
+    #     return
+    #     #await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
+
+    # if cantidad < 1:
+    #     await ctx.send(
+    #         embed=MensajeBasico(
+    #             "Suaga ahi sog :face_with_diagonal_mouth:",
+    #             f"{ctx.author} Necesita estar en un canal de voz para usar ester comando!",
+    #             DARK_RED
+    #         ),
+    #         silent=True
+    #     )
+    #     return
+    
+    
+    
+    # if cancion is None:
+    #     await ctx.send(
+    #         "❌ Debes elegir una canción para saltar.",
+    #         silent=True
+    #     )
+    #     return
+    
+    # index = int(cancion)
+
+    # if index >= len(queue[idGuild]):
+    #     await ctx.send("❌ Índice fuera de rango.", silent=True)
+    #     return
+
+    
+    # if isInVc[idGuild].is_playing():
+    #     isInVc[idGuild].pause()
+    
+    # queueIndex[idGuild] += cantidad
+    # await reproducir(ctx)
+
+    # if not arg:
+    #     if isInVc[idGuild] != None and isInVc[idGuild]:
+    #         isInVc[idGuild].pause()
+    #         queueIndex[idGuild] += 1
+    #         await reproducir(ctx)
+    # else:
+    #     if int(arg) > len(queue[idGuild]):
+    #         await ctx.send(embed=MensajeBasico("No hay canciones en la cola! :dizzy_face:",f"No puede saltar mas canciones de las que hay en la cola\nCanciones en cola: {len(queue[idGuild])}",DARK_PURPLE), silent=True)
+    #     else:
+    #         if isInVc[idGuild] != None and isInVc[idGuild]:
+    #             isInVc[idGuild].pause()
+    #             queueIndex[idGuild] += int(arg)
+    #             await reproducir(ctx)
+
+@skip.autocomplete("cancion")
+async def skip_autocomplete(interaction: discord.Interaction, current: str):
+    idGuild = interaction.guild.id
+    if not queue[idGuild]:
+        return []
+    
+    return [
+        discord.app_commands.Choice(
+            name=item[0]['Titulo'][:100],
+            value=str(i)
+        ) for i, item in enumerate(queue[idGuild])
+        if i > queueIndex[idGuild] and current.lower() in item[0]['Titulo'].lower()
+    ][:25]
+    # return [
+    #     discord.app_commands.Choice(
+    #         name=item[0]['Titulo'][:100],
+    #         value=str(i)
+    #     ) for i, item in enumerate(queue[idGuild][queueIndex[idGuild]:])
+    #     if current.lower() in item[0]['Titulo'].lower()
+    # ][:25]
+
+@elBulloso.hybrid_command(
     name="previus",
-    aliases=["pr"],
-    help="Commando para volver una cancion en la cola de reproducion"
+    description="Devuelve la cancion en la cola de reproducion",
+    aliases=["pr, PR, PREVIUS"],
+    help="Commando para volver una cancion en la cola de reproducion",
+    usage="$pr"
 )
-async def previus(ctx):
+@app_commands.describe(cancion="Canción anterior a la que deseas volver")
+async def previus(ctx: commands.Context, cancion: str = None):
     idGuild = int(ctx.guild.id)
     #cancion = queue[idGuild][queueIndex[idGuild]][0]
     if isInVc[idGuild] == None:
-        await ctx.send(embed=MensajeBasico("Suaga ahi sog :face_with_diagonal_mouth:",f"{ctx.author} Necesita estar en un canal de voz para usar ester comando!",DARK_RED),silent=True)
-    elif queueIndex[idGuild] <= 0:
-        await ctx.send(embed=MensajeBasico("No hay cancion anterior :open_mouth: ","No hay cancion anterior en la cola de reproducion\nVolviendo a reproducir la cancion actual", DARK_RED), silent=True)
-        isInVc[idGuild].pause()
-        await reproducir(ctx)
-        #await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
-    elif isInVc[idGuild] != None and isInVc[idGuild]:
-        isInVc[idGuild].pause()
-        queueIndex[idGuild] -= 1
-        await reproducir(ctx)
+
+        await ctx.send(
+            embed=MensajeBasico(
+                "Suaga ahi sog :face_with_diagonal_mouth:",
+                f"{ctx.author} Necesita estar en un canal de voz para usar ester comando!",
+                DARK_RED
+            ),
+            silent=True
+        )
+        return
+    
+    if not queue[idGuild]:
+        await ctx.send(
+            embed=MensajeBasico(
+                "Cola Vacia :open_mouth:",
+                "No hay canciones a las que volver",
+                DARK_RED
+            ),
+            silent=True
+        )
+        return
+
+    if cancion is not None:
+        index = int(cancion)
+        if index >= queueIndex[idGuild]:
+            await ctx.send(
+                "Trateme mas que serio",
+                "Esa cancion esta sonando o aun no ha sonado",
+                silent=True
+            )
+            return
+        queueIndex[idGuild] = index
+    else:
+        if queueIndex[idGuild] <= 0:
+
+            await ctx.send(
+                embed=MensajeBasico(
+                    "No hay cancion anterior :open_mouth: ",
+                    "No hay cancion anterior en la cola de reproducion\nVolviendo a reproducir la cancion actual",
+                    DARK_RED
+                ),
+                silent=True
+            )
+
+            isInVc[idGuild].pause()
+            await reproducir(ctx)
+            return
+            #await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
+
+    isInVc[idGuild].pause()
+    queueIndex[idGuild] -= 1
+    await reproducir(ctx)
+
+@previus.autocomplete("cancion")
+async def previus_autocomplete(interaction: discord.Interaction, current: str):
+    idGuild = interaction.guild.id
+
+    if not queue[idGuild] or queueIndex[idGuild] == 0:
+        return []
+    
+    return [
+        discord.app_commands.Choice(
+            name=item[0]['Titulo'][:100],
+            value=str(i)
+        ) for i, item in enumerate(queue[idGuild][:queueIndex[idGuild]])
+        if current.lower() in item[0]['Titulo'].lower()
+    ][-25:]
 
 async def siguienteCancion(ctx):
     #print("\nEntro a siguiente cancion")
@@ -599,6 +927,11 @@ async def reproducir(ctx):
         cancion = queue[idGuild][queueIndex[idGuild]][0]
         await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion), silent=True)
         source = discord.FFmpegPCMAudio(cancion['streamUrl'], **FFMPEG_OPTIONS)
+
+        ## ******************************* Probando el PCMVolumeTransformer
+        source = discord.PCMVolumeTransformer(source, 0.5)
+        ## ****************************************************************************
+
         isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.loop))
         #print(f"Source: {cancion['Source']}")
         #isInVc[idGuild].play(discord.FFmpegPCMAudio(
@@ -631,21 +964,29 @@ async def conectarse(ctx, channel):
     else:
         await isInVc[idGuild].move_to(channel)
 
-@elBulloso.command(
+@elBulloso.hybrid_command(
         name="usuarios",
-        help="Este comando muestra la lista de usuarios que ve el bot."
+        description="Este comando muestra la lista de usuarios que ve el bot.",
+        help="Este comando muestra la lista de usuarios que ve el bot.",
+        usage="$usuarios"
 )
 async def usuarios(ctx):
     usuarios = list(elBulloso.users)
     for user in usuarios:
         await ctx.send(user, silent=True)
 
-@elBulloso.command(
-        name="sebax",
-        help="Comando para mencionar a sebax ._.",
-        brief="Comando para mencionar a sebax",
-        description="Comando para mencionar a sebax ._."
-) #No sirve, al parecer la property mention no tiene setter, ._.
+# @elBulloso.command(
+#         name="sebax",
+#         help="Comando para mencionar a sebax ._.",
+#         brief="Comando para mencionar a sebax",
+#         description="Comando para mencionar a sebax ._."
+# ) #No sirve, al parecer la property mention no tiene setter, ._.
+@elBulloso.hybrid_command(
+    name="sebax",
+    description="Comando para mencionar a sebax ._.",
+    help="Comando para mencionar a sebax ._.",
+    usage="$sebax",
+)
 async def sebax(ctx):
     objetoUser = None
     for m in ctx.guild.members:
@@ -661,10 +1002,12 @@ discord.app_commands.autocomplete()
 
 
 #Comando para unir al bot al canal de voz del usuario
-@elBulloso.command(
+@elBulloso.hybrid_command(
     name="unirse",
+    description="Mueve el bot o Une el bot al canal de voz actual",
     aliases=["u","U","UNIRSE"],
-    help="Comando usado para unir al bot al canal de voz actual"
+    help="Comando usado para unir al bot al canal de voz actual",
+    usage="$u"
 )
 async def unirse(ctx):
     if ctx.author.voice:
@@ -673,20 +1016,30 @@ async def unirse(ctx):
     else:
         await ctx.send(embed=MensajeBasico("Sea serio pa! :clown: ",f'Tiene que estar en un canal de voz para unirme.',ROJO))
 
-# @elBulloso.command(
-#         name="salir",
-#         aliases=["q","Q","SALIR"],
-#         help="Comando usado para desconectar el bot del canal de voz actual.\nEsto eliminara la cola de reproduccion actual."
-# )
-@elBulloso.command(
-    name="salir",
-    description="Comando usado para desconectar el bot del canal de voz actual.\nEsto eliminara la cola de reproduccion actual."
+
+@elBulloso.hybrid_command(
+        name="salir",
+        description="Saca al bot del canal de voz y limpia la cola de reproducción.",
+        aliases=["q","Q","SALIR"],
+        help="Comando usado para desconectar el bot del canal de voz actual.\nEsto eliminara la cola de reproduccion actual.",
 )
-async def salir(ctx):
+async def salir(ctx: commands.Context):
     idGuild = int(ctx.guild.id)
-    isPlaying[idGuild] = isPaused[idGuild] = False
+
+    #Deteniendo la reproduccion si esta activa
+    if isInVc[idGuild] and isInVc[idGuild].is_playing():
+        isInVc[idGuild].stop()
+    
+    # Limipiando la cola de reproduccion
+
+    await limpiar(ctx)
+    
+    # Reiniciando los estados
+    isPlaying[idGuild] = False
+    isPaused[idGuild] = False
     queue[idGuild] = []
     queueIndex[idGuild] = 0
+
     if isInVc[idGuild] != None:
         em = discord.Embed(
             title=f"Desconectado de {ctx.author.voice.channel}",
@@ -697,6 +1050,8 @@ async def salir(ctx):
         await ctx.send(embed=em)
         await isInVc[idGuild].disconnect()
         isInVc[idGuild] = None
+    else:
+        await ctx.send("❌ No estoy conectado a ningún canal de voz. Sapa :middle_finger:")
 
 
 async def agregarPlaylistYT(ctx, url, channel):
@@ -723,15 +1078,33 @@ async def agregarPlaylistYT(ctx, url, channel):
             await ctx.send(embed=embed_Añadido_Queue(ctx, cancion), silent=True)
     return cancion
 
+def search_youtube(query):
 
-@elBulloso.command(name="play",
-        aliases=["p","P","PLAY"],
-        help="Comando para buscar en youtube una cancion con el nombre de la cancion",
-        usage="$p link",
-        description='Comando que ejecuta exlusivamente links o nombres de una cancion'
+        with yt_dlp.YoutubeDL(ydl_options) as ydl:
+            data = ydl.extract_info(query, download=False)
+
+            if 'entries' in data:
+                return data['entries'][:5]
+            return [data]
+
+
+
+# @elBulloso.command(name="play",
+#         aliases=["p","P","PLAY"],
+#         help="Comando para buscar en youtube una cancion con el nombre de la cancion",
+#         usage="$p link",
+#         description='Comando que ejecuta exlusivamente links o nombres de una cancion'
+# )
+@elBulloso.hybrid_command(
+    name="play",
+    description="Ejecuta una canción por nombre o link",
+    aliases=["p", "P", "PLAY"],
+    help="Comando para buscar en YouTube una canción con el nombre o URL",
+    usage="$p <nombre o link>",
 )
-async def play(ctx, *args):
-    search = " ".join(args)
+@app_commands.describe(search="Titulo o enlace de la cancion")
+async def play(ctx: commands.Context, *, search: str = None):
+    search = search or " ".join(search)
     idGuild = int(ctx.guild.id)
     #print(type(search), search, search.replace(" ", ""))
     try:
@@ -746,7 +1119,8 @@ async def play(ctx, *args):
         em.set_footer(icon_url=elBulloso.user.display_avatar)
         await ctx.send(ctx.author.mention,embed=em)
         return
-    if not args:
+    
+    if not search:
         if len(queue[idGuild]) == 0:
             await ctx.send(embed=MensajeBasico("Cola Vacia! :face_with_monocle: ","No hay canciones en la cola\n\nIngrese un link o una cancion para buscarla", DARK_RED), silent=True)
             return
@@ -815,6 +1189,17 @@ async def play(ctx, *args):
     # source = discord.FFmpegPCMAudio(audio_info['url'], **FFMPEG_OPTIONS)
 
     # vc.play(source, after=lambda e: print('Reproducción terminada', e))
+
+@play.autocomplete("search")
+async def youtube_autocomplete(interaction: discord.Interaction, current: str):
+        if not current or len(current) < 3:
+            return []
+        
+        results = await asyncio.to_thread(search_youtube, current)
+
+        return [
+            discord.app_commands.Choice(name=result['title'][:100], value=result['title']) for result in results[:3]
+        ]
 
 
 @elBulloso.command(
@@ -886,6 +1271,10 @@ async def on_ready():
     #     #print(f'token: {token}')
     #     print('token correcto Spotipy')
 
+    # guild=None limpia comandos globales. Si registras por guild_id, debes limpiar con guild=discord.Object(id=GUILD_ID)
+    # elBulloso.tree.clear_commands(guild=None)  # Limpia globales
+    # print(f"Comandos actualizados y limpiados.")
+
     cliente = spotipy.Spotify(auth_manager=auth_manager)
 
     try:
@@ -907,8 +1296,13 @@ async def on_ready():
         isPlaying[idGuild] = False
         isPaused[idGuild] = False
     #print(elBulloso.user.mention)
-    await elBulloso.tree.sync()
-    print(f'Inicializando como {elBulloso.user}, SpotifyUsr: {user_name['display_name']}')
+    # try:
+    #     comandos_Sincronizados = await elBulloso.tree.sync()
+    #     print(f"Se sincronizaron {len(comandos_Sincronizados)} comandos slash")
+    # except Exception as e:
+    #     print(f"Error al sincronizar comandos: {e}")
+
+    print(f'Inicializando como {elBulloso.user}, SpotifyUsr: {user_name['display_name']} \n Intents Activos: {intents}')
 
 #Listener para que el bot se desconecte al momento que no hallan usuarios en el canal de voz actual del bot.
 @elBulloso.listen()
