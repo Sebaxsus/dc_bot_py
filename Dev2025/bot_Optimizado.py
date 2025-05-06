@@ -4,9 +4,10 @@ from discord.ext import commands
 import spotipy, dotenv, yt_dlp, asyncio, functools, datetime, concurrent.futures
 
 from utils import esUrl
+from yt_wrapper import buscar_metadatos, obtener_stream, shutdown_executor
 
 # Para controlar los tiempos del cache
-import time
+import time, datetime
 
 # Para poder darle al slashCommand /play opciones de tipo es decir si el usuario elije tipo Link o Search
 
@@ -14,13 +15,12 @@ import typing
 
 ## Piscina de Hilos contralados (Yo defino el maximo de hilos)
 
+thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=5)
+
 # Archivo txt para guardar log de testing
 archivo_test = open("test.txt", "a")
 
-archivo_test.write(f"\nTest de botOg Ejecutado el: {datetime.date.today()} \n")
-
-thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=5)
-
+archivo_test.write(f"\nTest Ejecutado el: {datetime.date.today()} \n")
 
 env = dotenv.dotenv_values("bot_dc_py/src/.env")
 
@@ -109,10 +109,9 @@ ydl_options = {
     'quiet': True, # Silencia el log de yt_dlp
     'no_warnings': True, # Silencia las advertencias en consola de yt_dlp
     'skip_download': True, # No descarga el archivo
-    'default_search': 'ytsearch',
+    'default_search': 'ytsearch1',# Limita la busqueda a un resultado
     'extract_flat': False,
     'noplaylist': True,
-    'default_search': 'ytsearch1',
     'nocheckcertificate': True,
 }
 
@@ -174,17 +173,6 @@ def format_audio_seconds(seconds):
     mins, secs = divmod(int(seconds), 60)
     return f"{mins}:{secs:02}"
 
-# def esUrl(texto: str) -> tuple[bool, str]:
-#     isUrl = False
-#     # Eliminar parámetros innecesarios de YouTube
-#     if "youtube.com/watch" in texto and "&" in texto:
-#         texto = texto.split("&")[0]
-#         isUrl = True
-#     # Normalizar Url's/Links de Spotify
-#     if "spotify.com/track/" in texto:
-#         texto = texto.split("?")[0]
-#         isUrl = True
-#     return (isUrl, texto.strip())
 
 def formatear_link(link: str) -> str:
     # Eliminar parámetros innecesarios de YouTube
@@ -194,6 +182,101 @@ def formatear_link(link: str) -> str:
     if "spotify.com/track/" in link:
         link = link.split("?")[0]
     return link.strip()
+
+# def buscar_metadatos(query: str) -> dict:
+#     opciones = {
+#         'quiet': True,
+#         'skip_download': True,
+#         'extract_flat': True, # La diferencia entre False y true es Abismal en True se demora en promedio 0.5seg y en false se demora en promedio 7 seg
+#         'nocheckcertificate': True,
+#     }
+
+#     with yt_dlp.YoutubeDL(opciones) as ydl:
+#         info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+#         # print(f"Probando entries {info['entries'][0]}")
+#         video = info['entries'][0]
+#         # print("\n\nResultado Metadata: ", video, "\n\n\n")
+#         return {
+#             'Titulo': video.get('title'),
+#             'link': video.get('url') or f"https://www.youtube.com/watch?v={video.get('id')}",
+#             'streamUrl': None,
+#             'Canal': video.get("uploader"),
+#             'Duracion': format_audio_seconds(info.get('duration')), # Devuelve el tiempo de duracion ya formateado
+#             'Miniatura': f"https://i.ytimg.com/vi/{info.get('id')}/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig",
+#         }
+
+# def obtener_stream(url: str) -> dict:
+#     print(f"Entro obtener Stream... url:{url}")
+#     start = time.time()
+#     opciones = {
+#         'quiet': True,
+#         'skip_download': True,
+#         'format': 'bestaudio/best',
+#         'extract_flat': False,
+#         'default_search': 'ytsearch1',
+#         'nocheckcertificate': True,
+#     }
+
+#     with yt_dlp.YoutubeDL(opciones) as ydl:
+#         info = ydl.extract_info(url, download=False)
+#         video = info['entries'][0] if 'entries' in info else info
+#         cancion = {
+#             'Titulo': video.get('title'),
+#             'link': video['webpage_url'],
+#             'streamUrl': video['url'],
+#             'Canal': video.get('uploader'),
+#             'Duracion': video.get('duration_string'), # Devuelve el tiempo de duracion ya formateado
+#             'Miniatura': video['thumbnail'],
+#         }
+#         # print("Termino buscar stream, tiempo de ejecucion: ", time.time() - start)
+#         archivo_test.write(f"\tTest func obtener_stream optimizado Tiemo de Ejecucion: {time.time() - start}\n")
+#         return cancion
+
+async def procesarBloqueStream(idGuild: int, bloque: list) -> list:
+    canciones_validas = []
+    removidas = []
+
+    for cancion, channel in bloque:
+        if not cancion.get('stream_url'):
+            try:
+                nueva_cancion = await obtener_stream(cancion['link'])
+                if nueva_cancion['streamUrl']:
+                    canciones_validas.append([nueva_cancion, channel])
+                    print(f"✅ Stream URL obtenida: {nueva_cancion['Titulo']}")
+                else:
+                    removidas.append(cancion['Titulo'])
+            except Exception as e:
+                print(f"❌ Error obteniendo stream de '{cancion['Titulo']}': {e}")
+                removidas.append(cancion['Titulo'])
+        else:
+            canciones_validas.append([cancion, channel])
+
+    if removidas:
+        print(f"⚠️ Canciones eliminadas en este bloque: {', '.join(removidas)}")
+
+    return canciones_validas
+
+async def guardarStreamUrls(idGuild: int):
+    bloques = [queue[idGuild][i:i + 5] for i in range(0, len(queue[idGuild]), 5)]
+    tareas = []
+
+    for bloque in bloques:
+        # print("BloqueQUeue: ", bloque, "\n\n\n")
+        tarea = asyncio.create_task(procesarBloqueStream(idGuild, bloque))
+        tareas.append(tarea)
+
+    resultados = await asyncio.gather(*tareas)
+
+    canciones_finales = []
+    for resultado in resultados:
+        canciones_finales.extend(resultado)  # Cada resultado es una lista de [cancion, channel]
+
+    queue[idGuild] = canciones_finales  # reemplaza cola completa con las válidas
+    # print(f"\n\nLista cancionesFinales de guardarStreamURL: {canciones_finales}\n\n")
+    if canciones_finales:
+        return canciones_finales[-1][0]
+    else:
+        return None
 
 
 def nombreArtiCancionPlaylistTrack(datosTrack):
@@ -206,23 +289,28 @@ def nombreArtiCancionPlaylistTrack(datosTrack):
 
     return f"{cancion} - {artistaN}"
 
-def guardarCancionesSpList(datos, idGuild, channel):
+async def guardarCancionesSpList(datos, idGuild, channel):
     # print("Entro guardarCancionesSpList ")
     # Datos es una lista que contiene todas las canciones de la Playlist
     # Dentro, es decir que su length es la cantidad de canciones dentro de la lista
     cancion = None
     for i, track in enumerate(datos):
+        start = time.time()
+        datosTrack = track['track']
+        if datosTrack is None:
+            pass
+        else:
+            strCancion = nombreArtiCancionPlaylistTrack((datosTrack))
+            cancion = await buscar_metadatos(strCancion)
+            # try:
+            #     cancion = buscar(strCancion)
+            # except Exception as e:
+            #     print("Fallo el buscar la track de Spotify")
+            #     return
 
-        strCancion = nombreArtiCancionPlaylistTrack((track['track']))
-        cancion = buscar(strCancion)
-        # try:
-        #     cancion = buscar(strCancion)
-        # except Exception as e:
-        #     print("Fallo el buscar la track de Spotify")
-        #     return
-
-        queue[idGuild].append([cancion, channel])
-        print(f"Cancion {i}: ", cancion['Titulo'])
+            queue[idGuild].append([cancion, channel])
+            archivo_test.write(f"\tTest Funcion guardarCancionesSpList optimizado .to_thread Iteracion:{i} - Tiemo de Ejecucion: {time.time() - start}\n")
+            # print(f"Cancion {i}: {cancion['Titulo']} \n\tTiemo de Ejecucion: {time.time() - start}" )
 
     return cancion
 
@@ -232,7 +320,7 @@ def guardaCancionesSpAlbum(datos, idGuild, channel):
     # Dentro, es decir que su length es la cantidad de canciones dentro de la lista
     cancion = None
     for i, track in enumerate(datos):
-
+        start = time.time()
         strCancion = nombreArtiCancionPlaylistTrack((track))
         cancion = buscar(strCancion)
         # try:
@@ -242,7 +330,7 @@ def guardaCancionesSpAlbum(datos, idGuild, channel):
         #     return
 
         queue[idGuild].append([cancion, channel])
-        print(f"Cancion {i}: ", cancion['Titulo'])
+        # print(f"Cancion {i}: {cancion['Titulo']} \n\tTiemo de Ejecucion: {time.time() - start}" )
 
     return cancion
 
@@ -256,7 +344,9 @@ async def busquedaPlaylist(ctx: commands.Context, channel, urlPlaylist: tuple[st
     #Datos es la cantidad de canciones que contiene la playlist
     # ciclosDatosCancion = divmod(len(datos), 5)
     # Mod, restante
+    print("Pre-search Sp: ", urlPlaylist[1])
     datos = cliente.playlist(urlPlaylist[1])['tracks']['items']
+    # print(f"Datos Raw sp, {datos['tracks']['items']['artists']}, {datos['tracks']['items']['name']}")
     
     # Bloque de varias tareas
     bloques = [datos[i:i + 5] for i in range(0, len(datos), 5)]
@@ -265,19 +355,19 @@ async def busquedaPlaylist(ctx: commands.Context, channel, urlPlaylist: tuple[st
     tareas = []
 
     primer_bloque = bloques[0]
-    func = functools.partial(guardarCancionesSpList, primer_bloque, idGuild, channel)
+    await guardarCancionesSpList(primer_bloque, idGuild, channel)
 
     #Espero a que se resuelva el primero bloque
     #await elBulloso.loop.run_in_executor(None, func=func)
     #await asyncio.to_thread(func)
-    await elBulloso.bot_loop.run_in_executor(thread_pool, func)
+    # await elBulloso.bot_loop.run_in_executor(thread_pool, func)
     # Reproducir primera cancion en el diccionario queue (cola)
     if not isPlaying[idGuild]:
         await reproducir(ctx)
 
     #Leer recurso para entender esto Link https://stackoverflow.com/questions/65881761/discord-gateway-warning-shard-id-none-heartbeat-blocked-for-more-than-10-second
     for bloque in bloques[1:]:
-
+        tarea = asyncio.create_task(guardarCancionesSpList(bloque, idGuild, channel))
         # ini = 5 * i #al inicio sera 5 * 0 que es cero y nuestro punto de partida
         # last = 5 * (i + 1) # Al inicio sera 5 * (0 + 1) que es 5
         # if i == ciclosDatosCancion[0]:
@@ -289,17 +379,30 @@ async def busquedaPlaylist(ctx: commands.Context, channel, urlPlaylist: tuple[st
             #await ctx.send(embed=embed_Añadido_Queue(ctx, cancion))
             #pass
 
-        func = functools.partial(guardarCancionesSpList, bloque, idGuild, channel)
+        #func = functools.partial(guardarCancionesSpList, bloque, idGuild, channel)
         # El bloque de tareas que se va a guardar en la lista de bloques de tareas
-        tarea = elBulloso.bot_loop.run_in_executor(thread_pool, func)
+        #tarea = elBulloso.bot_loop.run_in_executor(thread_pool, func)
         # Agregando el bloque de tareas a la lista de bloques de tareas
         tareas.append(tarea)
+
     # Espero a que todas las tareas terminen
-    resultados = await asyncio.gather(*tareas)
-    archivo_test.write(f"Test Func Busqueda_PlaylistTracks sin Optimizar OG, Tiempo de Ejecucion: {time.time() - start}\n")
+    await asyncio.gather(*tareas)
+    # print(f"Termino el buscar Playlist track Metadatos, Tiempo de Ejecucion: {time.time() - start}")
+    archivo_test.write(f"Test Func Busqueda_PlaylistTracks_Metadatos optimizado, Tiempo de Ejecucion: {time.time() - start}\n")
+
+    start = time.time()
+
+    ultima_Cancion = await guardarStreamUrls(idGuild)
+
+    # print(f"Termino el buscar los streamUrl, Tiempo de Ejecucion: {time.time() - start}")
+    archivo_test.write(f"Test func guardarStreamURL optimizado, Tiempo de EjecucionL {time.time() - start}\n")
 
     # Devuelvo el ultimo resultado guardado en el ultimo bloque de tareas resuelto
-    return resultados[-1] if resultados else None
+    if not ultima_Cancion:
+        await ctx.send(embed=MensajeBasico("❌ Error", "No se pudo obtener ninguna canción válida del playlist", ROJO))
+        return
+    else:
+        return ultima_Cancion
 
 async def busquedaAlbum(ctx: commands.Context, channel, urlPlaylist: tuple[str, str]):
     # print("Entro busqueda album")
@@ -339,16 +442,17 @@ def buscar(search):
     start = time.time()
     with yt_dlp.YoutubeDL(ydl_options) as ydl:
         # search_results = []
-        info = ydl.extract_info(f"ytsearch3:{search}", download=False)
-        info = info['entries']
-        archivo_test.write(f"Test func Buscando {search} Sin Optimizar ytsearch3 Tiempo: {time.time() - start}\n")
+        info = ydl.extract_info(f"ytsearch1:{search}", download=False)
+        entries = info['entries'][0]
+        # print(f"Termino Buscando {search}\n Tiempo: {time.time() - start}")
+        archivo_test.write(f"Test func Buscando {search} Optimizado ytsearch1 Tiempo: {time.time() - start}\n")
         return {
-            'Titulo': info[0].get('title'),
-            'link': info[0]['webpage_url'],
-            'streamUrl': info[0]['url'],
-            'Canal': info[0].get('uploader'),
-            'Duracion': info[0].get('duration_string'), # Devuelve el tiempo de duracion ya formateado
-            'Miniatura': info[0]['thumbnail'],
+            'Titulo': entries.get('title'),
+            'link': f"https://www.youtube.com/watch?v={entries.get('id')}",
+            'streamUrl': entries.get('url'),
+            'Canal': entries.get('uploader'),
+            'Duracion': entries.get('duration_string'), # Devuelve el tiempo de duracion ya formateado
+            'Miniatura': entries['thumbnail'],
         }
         # for entry_info in info['entries']:
         #     title = entry_info.get("title", "Sin titulo")
@@ -356,27 +460,19 @@ def buscar(search):
         #     search_results.append(entry_info)
 
 def getStream(url):
+    print("Entro get stream, url: ", url)
     start = time.time()
-    opciones = {
-        'quiet': True,
-        'skip_download': True,
-        'format': 'bestaudio/best',
-        'extract_flat': False,
-        'default_search': 'ytsearch1',
-        'nocheckcertificate': True,
-    }
-    with yt_dlp.YoutubeDL(opciones) as ydl:
+    with yt_dlp.YoutubeDL(ydl_options) as ydl:
 
         info = ydl.extract_info(url, download=False)
-        archivo_test.write(f"\tTest func getStream optimizado Og Tiemo de Ejecucion: {time.time() - start}\n")
+        archivo_test.write(f"Test Func getStream sin optimizar, Tiempo de Ejecucion: {time.time() - start}\n")
         return {
             'Titulo': info.get('title'),
-            'link': info['webpage_url'],
-            'streamUrl': info['url'],
+            'link': f"https://www.youtube.com/watch?v={info.get('id')}",
+            'streamUrl': info.get('url'),
             'Canal': info.get('uploader'),
             'Duracion': info.get('duration_string'),
-            'Miniatura': info['thumbnail'],
-            'info': info,
+            'Miniatura': info['thumbnail']
         }
     
 def embed_Reproduciendo_Ahora(ctx, cancion):
@@ -540,7 +636,7 @@ def truncar_titulo(titulo: str, max_length: int = 60) -> str:
 )
 async def cola(ctx: commands.Context):
     idGuild = int(ctx.guild.id)
-    # print("Entro a cola de reproduccion:", queueIndex[idGuild], " ", queue[idGuild][queueIndex[idGuild]])
+    # print(f"Entro a cola de reproduccion:\n  Numero actual de la cola: {queueIndex[idGuild]}\n  Titulo Cancion actual: {queue[idGuild][queueIndex[idGuild]][0].get("Titulo")}")
     if not queue[idGuild]:
         colaEmbed = discord.Embed(
             title="🎶 Cola de Reproduccion",
@@ -578,7 +674,7 @@ async def cola(ctx: commands.Context):
     for i in range(queueIndex[idGuild], maxRange):
         returnIndex = i - queueIndex[idGuild]
         cancion = queue[idGuild][i][0]
-        titulo = "▶️ **Escuchando**" if returnIndex == 0 else ("⏭️ Siguiente" if returnIndex == 1 else f"🎵 {returnIndex} - {truncar_titulo(cancion["Titulo"])}")
+        titulo = "▶️ **Escuchando**" if returnIndex == 0 else ("⏭️ Siguiente" if returnIndex == 1 else f"🎵 - {returnIndex} - {truncar_titulo(cancion["Titulo"])}")
         mensaje = f"**[{cancion['Titulo']}]({cancion['link']})**\n- **{cancion['Canal']} {cancion['Duracion']}**" if returnIndex == 0 else (f"[{cancion['Titulo']}]({cancion['link']})\n- {cancion['Canal']} {cancion['Duracion']}")
         colaEmbed.add_field(
             name=titulo,
@@ -656,13 +752,14 @@ async def limpiar(ctx: commands.Context):
 
         await ctx.send(embed=embedClear, silent=True)
         #print(f'Cola actual: {queue[idGuild]}\nCancion Cola en reproduccion {queue[idGuild][0]}')
-        if len(queue[idGuild]) > 0:
-            queue[idGuild][0] = queue[idGuild][queueIndex[idGuild]]  
+        if len(queue[idGuild]) > 0 or queueIndex[idGuild] > len(queue[idGuild]):
+            queue[idGuild][0] = queue[idGuild][queueIndex[idGuild]]
             del (queue[idGuild])[1:]
         else:
             queue[idGuild] = []
         #print(f'Cola actual: {queue[idGuild]}\nCancion Cola en reproduccion {queue[idGuild][0]}')
         #queue[idGuild] = []
+
     queueIndex[idGuild] = 0
 
 @elBulloso.hybrid_command(
@@ -814,7 +911,7 @@ async def skip(ctx: commands.Context, cancion: str = None):
     #print(not arg, type(arg), arg == type(arg))
 
     idGuild = int(ctx.guild.id)
-
+    print(f"Logger del skip, numero de skips {cancion}, Numero de canciones en cola: {len(queue[idGuild])}, Indice actual de la cola: {queueIndex[idGuild]}")
     #cancion = queue[idGuild][queueIndex[idGuild]][0]
     if isInVc[idGuild] == None:
         await ctx.send(
@@ -952,61 +1049,74 @@ async def skip_autocomplete(interaction: discord.Interaction, current: str):
 @app_commands.describe(cancion="Canción anterior a la que deseas volver")
 async def previus(ctx: commands.Context, cancion: str = None):
     idGuild = int(ctx.guild.id)
+    print(f"Log Previus, indice de cancion a devolverse: {int(cancion)}, Indice actual de la cola: {queueIndex[idGuild]}")
+
+    if ctx.interaction:
+        ctx.interaction.response.defer(thinking=True)
     #cancion = queue[idGuild][queueIndex[idGuild]][0]
-    if isInVc[idGuild] == None:
 
-        await ctx.send(
-            embed=MensajeBasico(
-                "Suaga ahi sog :face_with_diagonal_mouth:",
-                f"{ctx.author} Necesita estar en un canal de voz para usar ester comando!",
-                DARK_RED
-            ),
-            silent=True
-        )
-        return
-    
-    if not queue[idGuild]:
-        await ctx.send(
-            embed=MensajeBasico(
-                "Cola Vacia :open_mouth:",
-                "No hay canciones a las que volver",
-                DARK_RED
-            ),
-            silent=True
-        )
-        return
-
-    if cancion is not None:
-        index = int(cancion)
-        if index >= queueIndex[idGuild]:
-            await ctx.send(
-                "Trateme mas que serio",
-                "Esa cancion esta sonando o aun no ha sonado",
-                silent=True
-            )
-            return
-        queueIndex[idGuild] = index
-    else:
-        if queueIndex[idGuild] <= 0:
+    try:
+        if isInVc[idGuild] == None:
 
             await ctx.send(
                 embed=MensajeBasico(
-                    "No hay cancion anterior :open_mouth: ",
-                    "No hay cancion anterior en la cola de reproducion\nVolviendo a reproducir la cancion actual",
+                    "Suaga ahi sog :face_with_diagonal_mouth:",
+                    f"{ctx.author} Necesita estar en un canal de voz para usar ester comando!",
                     DARK_RED
                 ),
                 silent=True
             )
-
-            isInVc[idGuild].pause()
-            await reproducir(ctx)
             return
-            #await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
-        else:
-            queueIndex[idGuild] -= 1
+        
+        if not queue[idGuild]:
+            await ctx.send(
+                embed=MensajeBasico(
+                    "Cola Vacia :open_mouth:",
+                    "No hay canciones a las que volver",
+                    DARK_RED
+                ),
+                silent=True
+            )
+            return
 
-    isInVc[idGuild].pause()
-    await reproducir(ctx)
+        if cancion is not None:
+            index = int(cancion)
+            if index >= queueIndex[idGuild]:
+                await ctx.send(
+                    "Trateme mas que serio",
+                    "Esa cancion esta sonando o aun no ha sonado",
+                    silent=True
+                )
+                return
+            queueIndex[idGuild] = index
+        else:
+            if queueIndex[idGuild] <= 0:
+
+                await ctx.send(
+                    embed=MensajeBasico(
+                        "No hay cancion anterior :open_mouth: ",
+                        "No hay cancion anterior en la cola de reproducion\nVolviendo a reproducir la cancion actual",
+                        DARK_RED
+                    ),
+                    silent=True
+                )
+                # Lo pause para volver a reproducirlo con reproducir en el indice actual
+                isInVc[idGuild].pause()
+                await reproducir(ctx)
+                return
+                #await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
+            else:
+                # Reduciendo el indice si se hizo previus sin numero, y hay al menos una cancion anterior  
+                queueIndex[idGuild] -= 1
+        if ctx.interaction:
+            ctx.interaction.followup.send(f"Se devolvio a la cancion numero {queueIndex[idGuild]}")
+        
+        isInVc[idGuild].pause()
+        await reproducir(ctx)
+        
+    except Exception as e:
+        await ctx.interaction.followup.send(f"❌ Ocurrió un error", ephemeral=True)
+        print(f"Fallo el previus: {e}")
 
 @previus.autocomplete("cancion")
 async def previus_autocomplete(interaction: discord.Interaction, current: str):
@@ -1018,10 +1128,10 @@ async def previus_autocomplete(interaction: discord.Interaction, current: str):
     return [
         discord.app_commands.Choice(
             name=item[0]['Titulo'][:100],
-            value=str(i)
+            value=str(i)          # Que recorra el diccionario queue llave guild desde 0 hasta el indice actual de la cola
         ) for i, item in enumerate(queue[idGuild][:queueIndex[idGuild]])
         if current.lower() in item[0]['Titulo'].lower()
-    ][-25:]
+    ][-25:] # Que muestres los primeros 25 registros de atras hacia adelante
 
 async def siguienteCancion(ctx):
     #print("\nEntro a siguiente cancion")
@@ -1031,8 +1141,15 @@ async def siguienteCancion(ctx):
     if queueIndex[idGuild] + 1 < len(queue[idGuild]):
         isPlaying[idGuild] = True
         queueIndex[idGuild] += 1
-
+        #         queue[Guild][numero_Actual_de_la_Cola_de_Reproduccion[Guild]][cancion]
+        #         Es decir la queue Completa de Guild indice -> numero en la cola actual de reproducion de la guild -> el 0 es cancion 1 canal de voz
         cancion = queue[idGuild][queueIndex[idGuild]][0]
+        # print(f"Precondicion cancion: {cancion}, condiciones: {not cancion['streamUrl']} {cancion['streamUrl'] is None}")
+        # Verificando si el diccionario cancion tiene la llave streamUrl
+        if not cancion.get('streamUrl') or cancion.get('streamUrl') is None:
+            cancion = await asyncio.to_thread(getStream, cancion['link'])
+            queue[idGuild][queueIndex[idGuild]][0] = cancion
+
         await mensaje(ctx, cancion)
         #print("anted de await ctx.send en linea 267")
         #await ctx.send(embed= embed_Reproduciendo_Ahora(ctx, cancion))
@@ -1049,16 +1166,22 @@ async def siguienteCancion(ctx):
 #Funcion para reproducir la musica
 async def reproducir(ctx):
     idGuild = int(ctx.guild.id)
-    print(f'entro a reproducir queIndex: {queueIndex[idGuild]} queue: {len(queue[idGuild])}, channel: {queue[idGuild][queueIndex[idGuild]][1]}')
+    # print(f'entro a reproducir queIndex: {queueIndex[idGuild]} queue: {len(queue[idGuild])}, channel: {queue[idGuild][queueIndex[idGuild]][1]}')
     if queueIndex[idGuild] < len(queue[idGuild]):
         isPlaying[idGuild] = True
         isPaused[idGuild] = False
 
         #print(f"Estado is playing: {isPlaying[idGuild]} ")
-
+        # Conectarse usando el canal guardado en el diccionario queue llave Guild, Indice de la Cola actual (queueIndex[idGuild]), posicion 1 [1] (canal de voz)
         await conectarse(ctx, queue[idGuild][queueIndex[idGuild]][1])
 
         cancion = queue[idGuild][queueIndex[idGuild]][0]
+        # print(f"Precondicion cancion: {cancion["Titulo"]}, condiciones: {not cancion['streamUrl']} {cancion['streamUrl'] is None}")
+        # Verificando si el diccionario cancion tiene la llave streamUrl
+        if not cancion.get('streamUrl') or cancion.get('streamUrl') is None:
+            cancion = await asyncio.to_thread(getStream, cancion['link'])
+            queue[idGuild][queueIndex[idGuild]][0] = cancion
+
         await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion), silent=True)
         source = discord.FFmpegPCMAudio(cancion['streamUrl'], **FFMPEG_OPTIONS)
 
@@ -1297,6 +1420,7 @@ async def play(ctx: commands.Context, *, search: str = None):
                 start = time.time()
                 cancion = await busquedaPlaylist(ctx, channel, search)
                 archivo_test.write(f"Test funcion: busquedaPlaylist optimizado tiempo de ejecucion: {time.time() - start}\n")
+                # print(f"\tTermino BusquedaPlaylistSp\nUtlima_CancionPl: {cancion}\n tiempo de ejecucion: ", time.time() - start)
             case "spotify_album":
                 search = veriSearch
                 cancion = await busquedaAlbum(ctx, channel, search)
@@ -1420,13 +1544,16 @@ def search_youtube_lite_cached(query):
     with yt_dlp.YoutubeDL(opciones) as ydl:
         info = ydl.extract_info(query, download=False)
         entries = info['entries'] if 'entries' in info else [info]
-
+        print(f"AutoComplete Youtube Search id: {entries[0].get('id')}")
         # Retorna solo lo esencial
         results = [{
             'title': entry.get('title'),
             'uploader': entry.get('uploader'),
-            'id': entry.get('id')
+            'id': entry.get('id'),
+            'url': entry.get('url'),
         } for entry in entries[:4]]
+
+        print(f"Autocomplet result 0 {results[0].get('id')}")
 
         autocomplete_cache[query] = (now, results)
         limpiar_cache()
@@ -1465,7 +1592,7 @@ async def youtube_autocomplete(interaction: discord.Interaction, current: str):
         return [
             discord.app_commands.Choice(
                 name=f"{result['title']} - {result['uploader']}"[:100],
-                value=result['title']) for result in results[:4]
+                value=result.get('url')) for result in results[:4]
         ]
 
 
@@ -1523,7 +1650,11 @@ async def spotify(ctx, args):
             except Exception as e:
                 await ctx.send(embed=MensajeBasico("El Token de Spotify Expiro 😶‍🌫️", ROJO))
 
-
+@elBulloso.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    await interaction.response.send_message(
+        f"❌ Error ejecutando el comando: `{error}`", ephemeral=True
+    )
 
 @elBulloso.event
 async def on_ready():
@@ -1584,4 +1715,9 @@ async def on_voice_state_update(member, before, after):
             queueIndex[idGuild] = 0
             await isInVc[idGuild].disconnect()
 
-elBulloso.run(tokenBot)
+@elBulloso.event
+async def on_close():
+    shutdown_executor()
+
+if __name__ == "__main__":
+    elBulloso.run(tokenBot)

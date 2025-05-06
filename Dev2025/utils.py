@@ -7,6 +7,16 @@ import discord
 
 def MensajeBasico(titulo: str, texto: str, color: int, icon_Url: str = None) -> discord.embeds.Embed:
     """
+    Devuelve un objecto discord.Embed
+
+    *Atributos/Parametros*:
+        - 'titulo: str'
+        - 'texto: str'
+        - 'color: int'
+        - 'icont_Url: str (url de la foto de perfil del bot)'
+    
+    *Returns*
+        - 'discord.embeds.Embed'
     """
     em = discord.Embed(
             title=titulo,
@@ -18,13 +28,62 @@ def MensajeBasico(titulo: str, texto: str, color: int, icon_Url: str = None) -> 
 
     return em
 
-def esUrl(texto):
-    tmp = False
-    texto = texto.split()
-    for i in texto:
-        if i.startswith("https:"):
-            tmp = True
-    return tmp
+def esUrl(texto: str) -> tuple[str, str]:
+    """
+    Pide un texto y la clasifica si es una url o no
+    y devuelve una url formateada si es url
+
+    *Clasifica los siguientes tipos de links:*
+        - 'yotube_video - 0'
+        - 'yotube_playlist - 1'
+        - 'spotify_track - 2'
+        - 'spotify_playlist - 3'
+        - 'spotify_album - 4'
+        - 'url_generica - 5'
+        - 'texto - 6'
+
+    *Atributos/Parametros*
+        - 'texto: str'
+    
+    *Returns:*
+        - tuple(type: str, url: str)
+    """
+    # *Returns:*
+    #     - tuple(isUrl: bool, tuple(type: str, url: str) )
+    texto = texto.strip()
+    tipo = "texto"
+    isUrl = False
+
+    # Verificando si el texto es un link
+    if texto.startswith('https://') or texto.startswith("http://"):
+        isUrl = True
+        tipo = "url_generica"
+        # Youtube playlist
+        if "youtube.com/playlist?list=" in texto:
+            texto = texto.split("&")[0]
+            tipo = "youtube_playlist"
+        # Video de Youtube
+        if "youtube.com/watch" in texto:
+            texto = texto.split("&")[0]
+            tipo = "youtube_video"
+        # Spotify Playlist
+        if "spotify.com/playlist/" in texto:
+            texto = texto.split("?")[0]
+            tipo = "spotify_playlist"
+        # Spotify Track
+        if "spotify.com/intl-es/track/" in texto or "spotify.com/track/" in texto:
+            texto = texto.split("?")[0].removeprefix('https://open.spotify.com/intl-es/track/')
+            tipo = "spotify_track"
+        # Spotify Album
+        if "spotify.com/album/" in texto or "spotify.com/intl-es/album/" in texto:
+            texto = texto.split("?")[0].removeprefix('https://open.spotify.com/intl-es/album/')
+            tipo = "spotify_album"
+    # En el caso de que no este dentro de ninguno de los anteriores
+    # Devolvera isUrl Flase y el texto original
+    print("Fin modulo utils.esUrl" ,(tipo, texto))
+    return (tipo,texto)
+        
+        
 
 def format_audio_seconds(seconds):
     if seconds is None:
