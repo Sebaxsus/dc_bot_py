@@ -4,10 +4,12 @@ Untitled.png
 Pipfile.lock
 Pipfile
 ObjetoUsuarios.txt
-.txt
+*.txt
 spotipy.txt
 /src/tokenacces.py
 /poo
 .cache
 /Libs__
 cambios.txt
+*.pyc
+/Dev2025/_pycache_

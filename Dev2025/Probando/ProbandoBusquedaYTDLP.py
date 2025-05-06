@@ -47,9 +47,17 @@ def buscar(busqueda: str):
             print(f"URL: https://www.youtube.com/watch?v={info.get('id')}")
 
 def buscarUrl(url):
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    ydl_opts_meta = {
+        'extract_flat': True,
+        'quiet': True,  # Para evitar logs en consola
+        'skip_download': True,  # No descarga nada
+    }
+    with yt_dlp.YoutubeDL(ydl_opts_meta) as ydl:
 
-        info = ydl.extract_info(url, download=False)
+        info = ydl.extract_info(f'ytsearch1:{url}', download=False)
+
+        for i in info:
+            print(f"{i},\n\t{info[i]}\n")
 
         # for i in info:
         #     archivo.write(f"{i},\n\t{info[i]}\n")
@@ -84,8 +92,8 @@ def buscarMetaDatos(busqueda: str):
 
 # archivo.write("\n\n\t***BUSQUEDA POR URL***\n\n")
 
-# buscarUrl("https://www.youtube.com/watch?v=fazMSCZg-mw")
+buscarUrl("https://www.youtube.com/watch?v=fazMSCZg-mw")
 
-buscarMetaDatos("Sleeping town (feat. yama) - whaledontsleep yama")
+# buscarMetaDatos("Sleeping town (feat. yama) - whaledontsleep yama")
 
 print("Termino", time.time() - start)

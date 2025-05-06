@@ -32,23 +32,63 @@ else:
     #print(f'token: {token}')
     print('token correcto')
 
-album_data = cliente.album("3CCnGldVQ90c26aFATC1PW")
+album_data = cliente.album("https://open.spotify.com/intl-es/album/3CCnGldVQ90c26aFATC1PW")
 
-## Recorrre los primero atribs
-# for i, item in enumerate(album_data['tracks']):
-#     print(f"Album track {i}, tracksAtribs: {item}, \ntrackAtribData: {album_data["tracks"][item]}")
+def recorrer_album():
+    for i, item in enumerate(album_data):
+        print(f"Album item {i}: {item}")
 
-# for i, item in enumerate(album_data['tracks']['items']):
-#     # print(f"Track {i}, data: {item}")
-#     print(f"Track artis {len(item['artists'])}, Track Name: {item['name']}")
+
+def recorrer_album_tracks_atrib(album):
+    # Recorrre los primero atribs
+    for i, item in enumerate(album_data['tracks']):
+        # print(f"Album track {i}, tracksAtribs: {item}, \ntrackAtribData: {album_data["tracks"][item]}")
+        print(f"Album track {i}, tracksAtribs: {item},")
+
+def recorrer_tracks_album(album):
+    for i, item in enumerate(album_data['tracks']['items']):
+        # print(f"Track {i}, data: {item}")
+        print(f"Track artis {len(item['artists'])}, Track Name: {item['name']}")
 
 playlist_data = cliente.playlist('https://open.spotify.com/playlist/4TpkY9l53Zz7kZmvgn7sbo')
 
-for i, item in enumerate(playlist_data['tracks']['items']):
-    print(f"TrackItem {i}")
-    # for i in item:
-    #     print(f"\t{i}: {item[i]}")
-    if i == 61:
-        print("Depurando posible error Artist:", playlist_data['tracks']['items'][61])
-    else:
-        print(f"PlaylisTrack artis {len(item['track']['artists'])}, Track Name: {item['track']['name']}, Track Artist: {item['track']['artists']}")
+def recorrer_playlist(playlist):
+
+    for i, item in enumerate(playlist):
+        print(f"Playlist Atrib {i}, {item} ")
+        # if item == "owner":
+        #     print(f"{playlist_data.get("name")} - {playlist_data.get("owner").get("display_name")}")
+
+def recorrer_tracks_playlist(playlist):
+    for i, item in enumerate(playlist['tracks']['items']):  
+        print(f"TrackItem {i}")    
+        # for i in item:
+        #     print(f"\t{i}: {item[i]}")
+        if i == 61:
+            print("Depurando posible error Artist:", playlist['tracks']['items'][61])
+        else:
+            print(f"PlaylisTrack artis {len(item['track']['artists'])}, Track Name: {item['track']['name']}, Track Artist: {item['track']['artists']}")
+
+pl_tracks = cliente.playlist_tracks("https://open.spotify.com/playlist/5dFb8AnJIbi6dUMSiN8gws")
+pl_data = cliente.playlist_items("https://open.spotify.com/playlist/5dFb8AnJIbi6dUMSiN8gws")
+# for i, item in enumerate(pl_tracks):
+#     # print(f"Track {i} {item}: {pl_tracks[item]}")
+#     print(f"Track {i}: {item}")
+
+# for i, item in enumerate(pl_data):
+#     print(f"Item {i}: {item}")
+#     if item == "items":
+#         # print(f"name: {pl_data[item][0].get("track").get("name")}")
+#         for a, trackAtr in enumerate(pl_data[item]):
+#             print(f"Track {a}")
+#             for j in pl_data[item][a]:
+#                 if j == "track":
+#                     for c in pl_data[item][a][j]:
+#                         if c == "available_markets":
+#                             print("available_markets")
+#                         else:
+#                             print(f"\t\ttrack atrib: {c}: {pl_data[item][a][j][c]}")
+#                 else:
+#                     print(f"\t{j}: {pl_data[item][a][j]}")
+
+print(album_data.get("name"))

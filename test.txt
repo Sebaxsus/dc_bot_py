@@ -698,3 +698,101 @@ Test Func getStream sin optimizar, Tiempo de Ejecucion: 4.151575088500977
 	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:4 - Tiemo de Ejecucion: 6.681170225143433
 Test Func getStream sin optimizar, Tiempo de Ejecucion: 3.606551170349121
 Test Func getStream sin optimizar, Tiempo de Ejecucion: 3.63788104057312
+
+Test Ejecutado el: 2025-05-05 
+
+Test Ejecutado el: 2025-05-05 
+
+Test Ejecutado el: 2025-05-06 02:56:40.145086
+Test Func getStream sin optimizar, Tiempo de Ejecucion: 3.940525531768799
+Test Func getStream sin optimizar, Tiempo de Ejecucion: 3.8356754779815674
+
+Test Ejecutado el: 2025-05-06 03:11:59.109244
+
+Test Ejecutado el: 2025-05-06 03:10:35.540743
+
+Test Ejecutado el: 2025-05-06 04:14:07.057580
+
+Test Ejecutado el: 2025-05-06 04:13:11.293419
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:0 - Tiemo de Ejecucion: 2.169332504272461
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:1 - Tiemo de Ejecucion: 0.765772819519043
+Test Func getStream sin optimizar, Tiempo de Ejecucion: 3.6060497760772705
+Test Func Busqueda_PlaylistTracks_Metadatos optimizado, Tiempo de Ejecucion: 6.878689765930176
+Test func guardarStreamURL optimizado, Tiempo de EjecucionL 7.126863241195679
+Test funcion: busquedaPlaylist optimizado tiempo de ejecucion: 14.005553007125854
+
+Test Ejecutado el: 2025-05-06 04:20:18.173881
+
+Test Ejecutado el: 2025-05-06 04:20:32.320535
+
+Test Ejecutado el: 2025-05-06 04:19:51.007680
+Test Func getStream sin optimizar, Tiempo de Ejecucion: 3.8489298820495605
+
+Test Ejecutado el: 2025-05-06 04:33:45.287403
+
+Test Ejecutado el: 2025-05-06 04:32:35.850963
+
+Test Ejecutado el: 2025-05-06 04:38:06.806774
+
+Test Ejecutado el: 2025-05-06 04:37:33.884244
+
+Test Ejecutado el: 2025-05-06 04:42:57.226151
+
+Test Ejecutado el: 2025-05-06 04:42:32.668107
+
+Test Ejecutado el: 2025-05-06 04:46:54.319498
+
+Test Ejecutado el: 2025-05-06 04:46:17.377120
+
+Test Ejecutado el: 2025-05-06 04:49:06.019534
+
+Test Ejecutado el: 2025-05-06 04:48:45.574903
+
+Test Ejecutado el: 2025-05-06 04:50:31.612416
+
+Test Ejecutado el: 2025-05-06 04:50:11.888442
+
+Test Ejecutado el: 2025-05-06 04:56:58.638855
+
+Test Ejecutado el: 2025-05-06 04:56:35.097126
+
+Test Ejecutado el: 2025-05-06 04:59:11.594692
+
+Test Ejecutado el: 2025-05-06 05:07:25.896947
+
+Test Ejecutado el: 2025-05-06 05:06:38.957446
+
+Test Ejecutado el: 2025-05-06 05:09:41.491289
+
+Test Ejecutado el: 2025-05-06 05:10:15.492331
+
+Test Ejecutado el: 2025-05-06 05:11:53.706078
+
+Test Ejecutado el: 2025-05-06 05:13:18.911001
+
+Test Ejecutado el: 2025-05-06 05:12:17.735105
+
+Test Ejecutado el: 2025-05-06 05:15:32.557203
+
+Test Ejecutado el: 2025-05-06 05:31:33.607361
+
+Test Ejecutado el: 2025-05-06 05:14:55.367573
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:0 - Tiemo de Ejecucion: 0.7896468639373779
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:1 - Tiemo de Ejecucion: 0.8118867874145508
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:2 - Tiemo de Ejecucion: 0.8215868473052979
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:3 - Tiemo de Ejecucion: 1.2632713317871094
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:4 - Tiemo de Ejecucion: 0.7441890239715576
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:0 - Tiemo de Ejecucion: 0.7831516265869141
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:0 - Tiemo de Ejecucion: 1.1126320362091064
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:0 - Tiemo de Ejecucion: 1.7253754138946533
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:1 - Tiemo de Ejecucion: 1.0528333187103271
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:1 - Tiemo de Ejecucion: 1.4026548862457275
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:2 - Tiemo de Ejecucion: 0.8961508274078369
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:2 - Tiemo de Ejecucion: 0.8052177429199219
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:3 - Tiemo de Ejecucion: 0.7300670146942139
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:3 - Tiemo de Ejecucion: 0.7843403816223145
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:4 - Tiemo de Ejecucion: 0.858466386795044
+	Test Funcion guardarCancionesSpList optimizado .to_thread Iteracion:4 - Tiemo de Ejecucion: 0.8661444187164307
+Test Func Busqueda_PlaylistTracks_Metadatos optimizado, Tiempo de Ejecucion: 9.76531720161438
+Test func guardarStreamURL optimizado, Tiempo de EjecucionL 31.00823950767517
+Test funcion: busquedaPlaylist optimizado tiempo de ejecucion: 40.77355670928955

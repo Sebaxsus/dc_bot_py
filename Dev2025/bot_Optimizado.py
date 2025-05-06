@@ -4,14 +4,10 @@ from discord.ext import commands
 import spotipy, dotenv, yt_dlp, asyncio, functools, datetime, concurrent.futures
 
 from utils import esUrl
-from yt_wrapper import buscar_metadatos, obtener_stream, shutdown_executor
+from yt_wrapper import buscar_metadatos, buscar, obtener_stream, shutdown_executor
 
 # Para controlar los tiempos del cache
 import time, datetime
-
-# Para poder darle al slashCommand /play opciones de tipo es decir si el usuario elije tipo Link o Search
-
-import typing
 
 ## Piscina de Hilos contralados (Yo defino el maximo de hilos)
 
@@ -20,7 +16,7 @@ thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 # Archivo txt para guardar log de testing
 archivo_test = open("test.txt", "a")
 
-archivo_test.write(f"\nTest Ejecutado el: {datetime.date.today()} \n")
+archivo_test.write(f"\nTest Ejecutado el: {datetime.datetime.now()}\n")
 
 env = dotenv.dotenv_values("bot_dc_py/src/.env")
 
@@ -279,7 +275,7 @@ async def guardarStreamUrls(idGuild: int):
         return None
 
 
-def nombreArtiCancionPlaylistTrack(datosTrack):
+def nombreArtiCancionPlaylistTrack(datosTrack) -> str:
     # print("entro nombrarArticacnionPlaylistTrac")
     artistaN = ""
     artistas = datosTrack['artists']
@@ -314,7 +310,7 @@ async def guardarCancionesSpList(datos, idGuild, channel):
 
     return cancion
 
-def guardaCancionesSpAlbum(datos, idGuild, channel):
+async def guardaCancionesSpAlbum(datos, idGuild, channel):
     # print("entro guardaCancionesSpAlbum ")
     # Datos es una lista que contiene todas las canciones de la Playlist
     # Dentro, es decir que su length es la cantidad de canciones dentro de la lista
@@ -322,7 +318,7 @@ def guardaCancionesSpAlbum(datos, idGuild, channel):
     for i, track in enumerate(datos):
         start = time.time()
         strCancion = nombreArtiCancionPlaylistTrack((track))
-        cancion = buscar(strCancion)
+        cancion = await buscar_metadatos(strCancion)
         # try:
         #     cancion = buscar(strCancion)
         # except Exception as e:
@@ -344,7 +340,7 @@ async def busquedaPlaylist(ctx: commands.Context, channel, urlPlaylist: tuple[st
     #Datos es la cantidad de canciones que contiene la playlist
     # ciclosDatosCancion = divmod(len(datos), 5)
     # Mod, restante
-    print("Pre-search Sp: ", urlPlaylist[1])
+    # print("Pre-search Sp: ", urlPlaylist[1])
     datos = cliente.playlist(urlPlaylist[1])['tracks']['items']
     # print(f"Datos Raw sp, {datos['tracks']['items']['artists']}, {datos['tracks']['items']['name']}")
     
@@ -362,6 +358,7 @@ async def busquedaPlaylist(ctx: commands.Context, channel, urlPlaylist: tuple[st
     #await asyncio.to_thread(func)
     # await elBulloso.bot_loop.run_in_executor(thread_pool, func)
     # Reproducir primera cancion en el diccionario queue (cola)
+    # Si no se esta reproduciendo ninguna cancion
     if not isPlaying[idGuild]:
         await reproducir(ctx)
 
@@ -417,43 +414,50 @@ async def busquedaAlbum(ctx: commands.Context, channel, urlPlaylist: tuple[str, 
     tareas = []
 
     primer_bloque = bloques[0]
-    func = functools.partial(guardaCancionesSpAlbum, primer_bloque, idGuild, channel)
+    await guardaCancionesSpAlbum(primer_bloque, idGuild, channel)
 
-    await elBulloso.bot_loop.run_in_executor(thread_pool, func)
     # Reproducir primera cancion en el diccionario queue (cola)
+    # Si no se esta reproduciendo ninguna cancion
     if not isPlaying[idGuild]:
         await reproducir(ctx)
 
     #Leer recurso para entender esto Link https://stackoverflow.com/questions/65881761/discord-gateway-warning-shard-id-none-heartbeat-blocked-for-more-than-10-second
     for bloque in bloques[1:]:
 
-        func = functools.partial(guardaCancionesSpAlbum, bloque, idGuild, channel)
         # El bloque de tareas que se va a guardar en la lista de bloques de tareas
-        tarea = elBulloso.bot_loop.run_in_executor(thread_pool, func)
+        tarea = asyncio.create_task(guardaCancionesSpAlbum(bloque, idGuild, channel))
+
         # Agregando el bloque de tareas a la lista de bloques de tareas
         tareas.append(tarea)
     # Espero a que todas las tareas terminen
-    resultados = await asyncio.gather(*tareas)
-    # Devuelvo el ultimo resultado guardado en el ultimo bloque de tareas resuelto
-    return resultados[-1] if resultados else None  
+    await asyncio.gather(*tareas)
 
-def buscar(search):
-    print("Buscando... ", search)
-    start = time.time()
-    with yt_dlp.YoutubeDL(ydl_options) as ydl:
-        # search_results = []
-        info = ydl.extract_info(f"ytsearch1:{search}", download=False)
-        entries = info['entries'][0]
-        # print(f"Termino Buscando {search}\n Tiempo: {time.time() - start}")
-        archivo_test.write(f"Test func Buscando {search} Optimizado ytsearch1 Tiempo: {time.time() - start}\n")
-        return {
-            'Titulo': entries.get('title'),
-            'link': f"https://www.youtube.com/watch?v={entries.get('id')}",
-            'streamUrl': entries.get('url'),
-            'Canal': entries.get('uploader'),
-            'Duracion': entries.get('duration_string'), # Devuelve el tiempo de duracion ya formateado
-            'Miniatura': entries['thumbnail'],
-        }
+    ultima_Cancion = await guardarStreamUrls(idGuild)
+
+    # Devuelvo el ultimo resultado guardado en el ultimo bloque de tareas resuelto
+    if not ultima_Cancion:
+        await ctx.send(embed=MensajeBasico("❌ Error", "No se pudo obtener ninguna canción válida del playlist", ROJO))
+        return
+    else:
+        return ultima_Cancion
+
+# def buscar(search):
+#     print("Buscando... ", search)
+#     start = time.time()
+#     with yt_dlp.YoutubeDL(ydl_options) as ydl:
+#         # search_results = []
+#         info = ydl.extract_info(f"ytsearch1:{search}", download=False)
+#         entries = info['entries'][0]
+#         # print(f"Termino Buscando {search}\n Tiempo: {time.time() - start}")
+#         archivo_test.write(f"Test func Buscando {search} Optimizado ytsearch1 Tiempo: {time.time() - start}\n")
+#         return {
+#             'Titulo': entries.get('title'),
+#             'link': f"https://www.youtube.com/watch?v={entries.get('id')}",
+#             'streamUrl': entries.get('url'),
+#             'Canal': entries.get('uploader'),
+#             'Duracion': entries.get('duration_string'), # Devuelve el tiempo de duracion ya formateado
+#             'Miniatura': entries['thumbnail'],
+#         }
         # for entry_info in info['entries']:
         #     title = entry_info.get("title", "Sin titulo")
         #     duration = entry_info.get("duration",0)
@@ -570,6 +574,7 @@ async def ping(ctx: commands.Context, *, nombre: str = None):
     
     #La variable user guarda un objecto que genere la funcion find de utils, En otras palbras lo que se guarda en user es un objeto no un string ni nada parecido.
     user = discord.utils.find(lambda m: m.name.lower() == nombre.lower(), ctx.channel.guild.members)
+    print("Usuario ", user.name)
     #Para manejar un error y usar discord como respuesta al error se debe usar el manejador de errores de discord.ext.commands alias on_command_error() o error().
     #Tambien hay un condicional llamado check usado comunmente para verificar permisos de usuario y si puede usar comandos o no.
     if not user:
@@ -650,6 +655,19 @@ async def cola(ctx: commands.Context):
         )
         return
     
+    # Si el indice actual es igual o mayor a la cantidad de canciones en la cola mande el mensaje
+    if queueIndex[idGuild] >= len(queue[idGuild]) or len(queue[idGuild]) == 0:
+        print(f"Provando que es cola cuando se vacia {type(queue[idGuild])} {queue[idGuild]}")
+        ctx.send(
+            embed=MensajeBasico(
+                "🎶 Cola de Reproducción vacia! :face_with_monocle:",
+                f"No hay canciones en la cola de reproduccion {len(queue[idGuild])}",
+                DARK_RED
+            ),
+            silent=True
+        )
+        return
+    
     colaEmbed = discord.Embed(
         title="🎶 Cola de Reproducción",
         colour=DARK_PURPLE
@@ -665,6 +683,7 @@ async def cola(ctx: commands.Context):
     #   <VoiceChannel id=1119856147520823309 name='General' rtc_region=None position=0 bitrate=64000 video_quality_mode=<VideoQualityMode.auto: 1> user_limit=0 category_id=1119856147520823307>
     # ] ---> Este es el indice [queueIndex[idGuild]] ||
     # Es decir que para acceder al objeto de la cancion tengo que acceder al indice 0 de queue[idGuild][indice_De_la_Cancion en Queue][0][atributo_que_necesito_acceder]
+    
     miniatura = queue[idGuild][queueIndex[idGuild]][0]["Miniatura"]
     colaEmbed.set_thumbnail(url=miniatura)
 
@@ -752,7 +771,7 @@ async def limpiar(ctx: commands.Context):
 
         await ctx.send(embed=embedClear, silent=True)
         #print(f'Cola actual: {queue[idGuild]}\nCancion Cola en reproduccion {queue[idGuild][0]}')
-        if len(queue[idGuild]) > 0 or queueIndex[idGuild] > len(queue[idGuild]):
+        if len(queue[idGuild]) > 0 and queueIndex[idGuild] > len(queue[idGuild]):
             queue[idGuild][0] = queue[idGuild][queueIndex[idGuild]]
             del (queue[idGuild])[1:]
         else:
@@ -873,7 +892,7 @@ async def pause(ctx: commands.Context):
     help="Commando para volver a reproducir una cancion pausada",
 )
 async def resume(ctx: commands.Context):
-    print("Resumiendo...")
+    # print("Resumiendo...")
     idGuild = int(ctx.guild.id)
 
     if not isInVc[idGuild]:
@@ -1133,11 +1152,12 @@ async def previus_autocomplete(interaction: discord.Interaction, current: str):
         if current.lower() in item[0]['Titulo'].lower()
     ][-25:] # Que muestres los primeros 25 registros de atras hacia adelante
 
-async def siguienteCancion(ctx):
+async def siguienteCancion(ctx: commands.Context):
     #print("\nEntro a siguiente cancion")
     idGuild = int(ctx.guild.id)
     if not isPlaying[idGuild]:
         return
+    # Si la el indice de la cola actual + 1 es menor a la cantidad de canciones en la cola
     if queueIndex[idGuild] + 1 < len(queue[idGuild]):
         isPlaying[idGuild] = True
         queueIndex[idGuild] += 1
@@ -1159,8 +1179,19 @@ async def siguienteCancion(ctx):
         isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.bot_loop))
         #isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
     else:
-        queueIndex[idGuild] += 1
+        # Se supone que ya no hay mas canciones en la cola entonces entra aqui
+        # Por eso entonces limpio la cola
+        queueIndex[idGuild] = 0
+        queue[idGuild] = []
         isPlaying[idGuild] = False
+        await ctx.send(
+            embed=MensajeBasico(
+                "Se termino la cola de reproduccion! :frowning2:",
+                "Limpiando la cola de reproduccion",
+                DARK_GREEN
+            ),
+            silent=True
+        )
         
 
 #Funcion para reproducir la musica
@@ -1409,7 +1440,7 @@ async def play(ctx: commands.Context, *, search: str = None):
             return
     else:
         #esplaylist = esPlaylistYT(search)
-        print("Precondicion search: ",search)
+        # print("Precondicion search: ",search)
         veriSearch = esUrl(search) 
         match veriSearch[0]:
             case "youtube_playlist":
@@ -1428,14 +1459,14 @@ async def play(ctx: commands.Context, *, search: str = None):
                 search = veriSearch[1]
                 try:
                     track_data = cliente.track(search)
-                    cancion = await asyncio.to_thread(buscar, nombreArtiCancionPlaylistTrack(track_data))
+                    cancion = await buscar(nombreArtiCancionPlaylistTrack(track_data))
                 except Exception as e:
                     await ctx.send(embed=MensajeBasico("❌ No se pudo obtener el track", "Fallo el buscar la track de Spotify", ROJO), silent=True)
                     return
             case "youtube_video":
                 search = veriSearch[1]
                 try:
-                    cancion = await asyncio.to_thread(getStream, search)
+                    cancion = await obtener_stream(search)
                     if not cancion:
                         raise ValueError("No se encontró la canción")
                 except Exception as e:
@@ -1443,10 +1474,10 @@ async def play(ctx: commands.Context, *, search: str = None):
                     return
             case "url_generica":
                 search = veriSearch[1]
-                cancion = await asyncio.to_thread(getStream, search)
+                cancion = await obtener_stream(search)
             case "texto":
                 try:
-                    cancion = await asyncio.to_thread(buscar, search)
+                    cancion = await buscar(search)
                     if not cancion:
                         raise ValueError("No se encontró la canción")
                 except Exception as e:
@@ -1520,7 +1551,7 @@ def limpiar_cache():
     except Exception as e:
         print(f"Fallo la Limpieza de el cache: {e}")
 
-def search_youtube_lite_cached(query):
+def search_youtube_lite_cached(query: str) -> dict:
     now = time.time()
     print("Entro search_Lite_cached, query", query)
 
@@ -1530,21 +1561,34 @@ def search_youtube_lite_cached(query):
         # Cache TTL es Time To Live
         if now - cached_time < CACHE_TTL:
             return cached_results # Cache valido
+    
+    if query.startswith("https://www.youtube.com/watch?"):
+        # print("Entro autocomplete YTVid")
+        # Si no está en cache o está vencido, buscar
+        opciones = {
+            'quiet': True,
+            'skip_download': True,
+            'extract_flat': True,  # evita bajar info del stream
+            'default_search': 'ytsearch1',
+        }
+        query = f"ytsearch1:{query}"
 
-    # Si no está en cache o está vencido, buscar
-    opciones = {
-        'quiet': True,
-        'skip_download': True,
-        'extract_flat': 'in_playlist',  # evita bajar info del stream
-        'default_search': 'ytsearch5',
-    }
-        # 'forcejson': True,
-        # 'simulate': True,
+    else:
+        # Si no está en cache o está vencido, buscar
+        opciones = {
+            'quiet': True,
+            'skip_download': True,
+            'extract_flat': 'in_playlist',  # evita bajar info del stream
+            'default_search': 'ytsearch5',
+        }
+        query = f"ytsearch4:{query}"
+            # 'forcejson': True,
+            # 'simulate': True,
 
     with yt_dlp.YoutubeDL(opciones) as ydl:
         info = ydl.extract_info(query, download=False)
         entries = info['entries'] if 'entries' in info else [info]
-        print(f"AutoComplete Youtube Search id: {entries[0].get('id')}")
+        # print(f"AutoComplete Youtube Search id: {entries[0].get('id')}")
         # Retorna solo lo esencial
         results = [{
             'title': entry.get('title'),
@@ -1553,7 +1597,7 @@ def search_youtube_lite_cached(query):
             'url': entry.get('url'),
         } for entry in entries[:4]]
 
-        print(f"Autocomplet result 0 {results[0].get('id')}")
+        # print(f"Autocomplet result 0 {results[0].get('id')}  {time.time() - now}")
 
         autocomplete_cache[query] = (now, results)
         limpiar_cache()
@@ -1567,15 +1611,38 @@ async def youtube_autocomplete(interaction: discord.Interaction, current: str):
         
         # results = await asyncio.to_thread(search_youtube, current)
 
-        if current.startswith("https://open.spotify.com/") == True:
+        # Si la busqueda es de spotify entre aqui
+        veriUrl = esUrl(current)
+        if veriUrl[0] in ["spotify_playlist", "spotify_track", "spotify_album"]:
+            try:
+                match veriUrl[0]:
+                    case "spotify_track":
+                        data = nombreArtiCancionPlaylistTrack(cliente.track(veriUrl[1]))
+                    case "spotify_playlist":
+                        # playlist_data = cliente.playlist(veriUrl[1])
+                        # Por temas de protecion de datos no muestro el usuario que creo la playlist
+                        # data = f"{playlist_data.get("name")} - {playlist_data.get("owner")}
+                        data = cliente.playlist(veriUrl[1]).get("name")
+                    case "spotify_album":
+                        data = cliente.album(veriUrl[1]).get("name")
+                    case _:
+                        data = "No hay autocompletado con Spotify 😘"
+            except Exception as e:
+                interaction.followup.send(
+                    embed=MensajeBasico(
+                        "Fallo el autcomplete",
+                        "Mala mia sog :melting_face: ",
+                        DARK_RED
+                    )
+                )
             return [
                 discord.app_commands.Choice(
-                    name="No hay autocompletado con Spotify 😘",
+                    name=data if data else "No hay autocompletado con Spotify 😘",
                     value=current
                 )
             ]
-        veriUrl = esUrl(current)
-        if veriUrl[0] in ["youtube_video", "texto", "youtube.com/playlist?list="]:
+        # Si la busqueda es un texto o link de youtube entre aqui
+        if veriUrl[0] in ["youtube_video", "texto", "youtube_playlist"]:
             current = veriUrl[1]
             
         
@@ -1585,14 +1652,16 @@ async def youtube_autocomplete(interaction: discord.Interaction, current: str):
                 timeout=2.5
             )
         except asyncio.TimeoutError:
+            # Si se queda buscando y alguien escoge la opcion buscara lo que puso en search:
             return [
-                discord.app_commands.Choice(name="⌛ Buscando...", value="Buscando...")
+                discord.app_commands.Choice(name="⌛ Buscando...", value=current)
             ]
-
+        
         return [
             discord.app_commands.Choice(
                 name=f"{result['title']} - {result['uploader']}"[:100],
-                value=result.get('url')) for result in results[:4]
+                value=result.get('url'))
+                for result in results[:4]
         ]
 
 
@@ -1639,7 +1708,7 @@ async def spotify(ctx, args):
         else:
             search = search.removeprefix('https://open.spotify.com/intl-es/track/')
             try:
-                cancion = getStream(buscar(nombreArtiCancionPlaylistTrack(cliente.track(search))))
+                cancion = await buscar(nombreArtiCancionPlaylistTrack(cliente.track(search)))
 
                 queue[idGuild].append([cancion, channel])
 
@@ -1720,4 +1789,8 @@ async def on_close():
     shutdown_executor()
 
 if __name__ == "__main__":
-    elBulloso.run(tokenBot)
+    try:
+        elBulloso.run(tokenBot)
+    except KeyboardInterrupt:
+        shutdown_executor()
+        print("⛔️ Cierre manual del bot (Ctrl+C). Recursos liberados.")

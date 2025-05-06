@@ -7,16 +7,20 @@ import discord
 
 def MensajeBasico(titulo: str, texto: str, color: int, icon_Url: str = None) -> discord.embeds.Embed:
     """
-    Devuelve un objecto discord.Embed
+    ## Devuelve un objecto discord.Embed
 
-    *Atributos/Parametros*:
-        - 'titulo: str'
-        - 'texto: str'
-        - 'color: int'
-        - 'icont_Url: str (url de la foto de perfil del bot)'
-    
-    *Returns*
-        - 'discord.embeds.Embed'
+    ---------------------
+
+    **Args:**
+        - **titulo:** `(str)`
+        - **texto:** `(str)`
+        - **color:** `(int)`
+        - **icont_Url:** `(str) | url de la foto de perfil del bot`
+
+    ---------------------    
+
+    **Returns**
+        - `discord.embeds.Embed`
     """
     em = discord.Embed(
             title=titulo,
@@ -30,23 +34,29 @@ def MensajeBasico(titulo: str, texto: str, color: int, icon_Url: str = None) -> 
 
 def esUrl(texto: str) -> tuple[str, str]:
     """
-    Pide un texto y la clasifica si es una url o no
-    y devuelve una url formateada si es url
+    ##Pide un texto y la clasifica si es una url o no
+    ## y devuelve una url formateada si es url
 
-    *Clasifica los siguientes tipos de links:*
-        - 'yotube_video - 0'
-        - 'yotube_playlist - 1'
-        - 'spotify_track - 2'
-        - 'spotify_playlist - 3'
-        - 'spotify_album - 4'
-        - 'url_generica - 5'
-        - 'texto - 6'
+    ---------------------
 
-    *Atributos/Parametros*
-        - 'texto: str'
+    **Clasifica los siguientes tipos de links:**
+        - `yotube_video - 0`
+        - `yotube_playlist - 1`
+        - `spotify_track - 2`
+        - `spotify_playlist - 3`
+        - `spotify_album - 4`
+        - `url_generica - 5`
+        - `texto - 6'
+
+    ---------------------
+
+    **Args**
+        - **texto:** `str`
     
-    *Returns:*
-        - tuple(type: str, url: str)
+    ---------------------
+    
+    **Returns:**
+        - `tuple(type: str, url: str)`
     """
     # *Returns:*
     #     - tuple(isUrl: bool, tuple(type: str, url: str) )
@@ -76,7 +86,8 @@ def esUrl(texto: str) -> tuple[str, str]:
             tipo = "spotify_track"
         # Spotify Album
         if "spotify.com/album/" in texto or "spotify.com/intl-es/album/" in texto:
-            texto = texto.split("?")[0].removeprefix('https://open.spotify.com/intl-es/album/')
+            # texto = texto.split("?")[0].removeprefix('https://open.spotify.com/intl-es/album/')
+            texto = texto.split("?")[0]
             tipo = "spotify_album"
     # En el caso de que no este dentro de ninguno de los anteriores
     # Devolvera isUrl Flase y el texto original
@@ -85,7 +96,20 @@ def esUrl(texto: str) -> tuple[str, str]:
         
         
 
-def format_audio_seconds(seconds):
+def format_audio_seconds(seconds: str | int) -> str:
+    """
+    ## Convierte un string de segundos a formato `Minutos:Segundos`
+
+    ---------------------
+
+    **Args:**
+        - **Segundos** `(int)`
+    
+    ---------------------
+
+    **Returns:**
+        - `(str)`
+    """
     if seconds is None:
         return "desconocido"
     mins, secs = divmod(int(seconds), 60)
