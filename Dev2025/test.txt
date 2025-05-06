@@ -272,3 +272,7 @@ Depurando posible error Artist:
         'track': None,
         'video_thumbnail': {'url': None}
     }
+
+Test Ejecutado el: 2025-05-06 16:55:42.259208
+
+Test Ejecutado el: 2025-05-06 12:41:37.078121

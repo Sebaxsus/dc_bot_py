@@ -92,8 +92,12 @@ queueIndex = {}
 #Diccionario con id de la Guild y el status de si esta conectado a un canal de voz o no
 isInVc = {}
 
+# Diccionario Global para manejar las deconciones manuales (Por codigo) y diferenciarlas de las desconexiones por errores (WebSocket closed with 1006)
+desconectado_por_codigo = {}
+ctx_por_guild = {}
 # Diccionario global
 autocomplete_cache = {}
+
 CACHE_TTL = 20  # tiempo en segundos para considerar válida una entrada
 
 #Constant for ytdl_Youtube and FFMPEG
@@ -778,7 +782,7 @@ async def limpiar(ctx: commands.Context):
             queue[idGuild] = []
         #print(f'Cola actual: {queue[idGuild]}\nCancion Cola en reproduccion {queue[idGuild][0]}')
         #queue[idGuild] = []
-
+    ctx_por_guild.pop(ctx.guild.id, None)
     queueIndex[idGuild] = 0
 
 @elBulloso.hybrid_command(
@@ -824,7 +828,8 @@ async def eliminar(ctx: commands.Context, cancion: str = None):
     )
 
     if not queue[idGuild] and isInVc[idGuild]:
-        
+        desconectado_por_codigo[idGuild] = True
+
         await isInVc[idGuild].disconnect()
 
         isInVc[idGuild] = None
@@ -832,6 +837,7 @@ async def eliminar(ctx: commands.Context, cancion: str = None):
         isPlaying[idGuild] = isPaused[idGuild] = False
 
         queueIndex[idGuild] = 0
+        ctx_por_guild.pop(ctx.guild.id, None)
 
     elif queueIndex[idGuild] == len(queue[idGuild]):
 
@@ -1195,7 +1201,24 @@ async def siguienteCancion(ctx: commands.Context):
         
 
 #Funcion para reproducir la musica
-async def reproducir(ctx):
+async def reproducir(ctx: commands.Context):
+    """
+        Esta funcion se encarga de Verificar la cola de reproduccion
+        conectar el bot al canal de voz del usuario que uso el comando
+        Revisar si la cancion guardada en la cola tiene la streamUrl
+        Buscar la streamUrl si no esta,
+
+        Mandar un contexto de la cancion que va a reproducir
+
+        reproducir la cancion usando FFmpeg
+
+        al terminar de reproducir ir a la funcion siguienteCancion
+
+        ----------------------------
+
+        **Args:**
+            **ctx:** `(class commands.Context)`
+    """
     idGuild = int(ctx.guild.id)
     # print(f'entro a reproducir queIndex: {queueIndex[idGuild]} queue: {len(queue[idGuild])}, channel: {queue[idGuild][queueIndex[idGuild]][1]}')
     if queueIndex[idGuild] < len(queue[idGuild]):
@@ -1235,7 +1258,22 @@ async def reproducir(ctx):
 #Comando para conectar / Mover el bot a un canal de voz Edit: No deberia ser un comando
 #Funcion para conectar el bot al canal de voz del autor 
 #@elBulloso.command()
-async def conectarse(ctx, channel):
+async def conectarse(ctx: commands.Context, channel: discord.VoiceChannel):
+    """
+        Este comando se encarga de conectar o mover el bot a un canal de voz
+
+        ----------------------------
+
+        **Args:**
+            **ctx:** `(class commands.Context)`
+            **channel:** `(class discord.VoiceChannel)`
+        
+        ----------------------------
+
+        **Returns:**
+            `None`
+            Devuelve contexto en discord
+    """
     idGuild = int(ctx.guild.id)
     if isInVc[idGuild] == None or not isInVc[idGuild].is_connected():
         isInVc[idGuild] = await channel.connect()
@@ -1258,7 +1296,10 @@ async def conectarse(ctx, channel):
         help="Este comando muestra la lista de usuarios que ve el bot.",
         usage="$usuarios"
 )
-async def usuarios(ctx):
+async def usuarios(ctx: commands.Context):
+    """
+        Este comando muestra la lista de usuarios que ve el bot.
+    """
     usuarios = list(elBulloso.users)
     for user in usuarios:
         await ctx.send(user, silent=True)
@@ -1275,7 +1316,10 @@ async def usuarios(ctx):
     help="Comando para mencionar a sebax ._.",
     usage="$sebax",
 )
-async def sebax(ctx):
+async def sebax(ctx: commands.Context):
+    """
+        Este comando recibe el contexto del comando y devuelve en discord un mensaje mencionando a sebax
+    """
     objetoUser = None
     for m in ctx.guild.members:
         if 'sebaxsus' == m.name:
@@ -1297,7 +1341,19 @@ discord.app_commands.autocomplete()
     help="Comando usado para unir al bot al canal de voz actual",
     usage="$u"
 )
-async def unirse(ctx):
+async def unirse(ctx: commands.Context):
+    """
+        ### Une el bot a un chat de voz en el que esta el usuario que uso el comando
+
+        ----------------------------
+
+        **Args:**
+            **ctx:** `(class commands.Context)`
+        
+        **Returns:**
+            `None`
+            No retorna nada manda el contexto a Discord
+    """
     if ctx.author.voice:
         channel = ctx.author.voice.channel
         await conectarse(ctx, channel)
@@ -1312,6 +1368,19 @@ async def unirse(ctx):
         help="Comando usado para desconectar el bot del canal de voz actual.\nEsto eliminara la cola de reproduccion actual.",
 )
 async def salir(ctx: commands.Context):
+    """
+        ### Se encarga de limpiar la cola de reproduccion,
+        ### reiniciar los estados globales y desconectar el bot
+
+        ----------------------------
+
+        **Args:**
+            **ctx**: `(class commands.Context)`
+        
+        **Returns**:
+            `None`
+            Manda el contexto a discord directamente
+    """
     idGuild = int(ctx.guild.id)
 
     #Deteniendo la reproduccion si esta activa
@@ -1335,14 +1404,17 @@ async def salir(ctx: commands.Context):
             colour=0xdf1141
         )
         em.set_footer(icon_url=elBulloso.user.display_avatar)
+        desconectado_por_codigo[idGuild] = True
+
         await ctx.send(embed=em)
         await isInVc[idGuild].disconnect()
+        ctx_por_guild.pop(ctx.guild.id, None)
         isInVc[idGuild] = None
     else:
         await ctx.send("❌ No estoy conectado a ningún canal de voz. Sapa :middle_finger:")
 
 
-async def agregarPlaylistYT(ctx, url, channel):
+async def agregarPlaylistYT(ctx: commands.Context, url: str, channel: discord.VoiceChannel):
     cancion = None
     opciones = {
         'quit': True,
@@ -1366,14 +1438,14 @@ async def agregarPlaylistYT(ctx, url, channel):
             await ctx.send(embed=embed_Añadido_Queue(ctx, cancion), silent=True)
     return cancion
 
-def search_youtube(query):
+# def search_youtube(query):
 
-        with yt_dlp.YoutubeDL(ydl_options) as ydl:
-            data = ydl.extract_info(query, download=False)
+#         with yt_dlp.YoutubeDL(ydl_options) as ydl:
+#             data = ydl.extract_info(query, download=False)
 
-            if 'entries' in data:
-                return data['entries'][:5]
-            return [data]
+#             if 'entries' in data:
+#                 return data['entries'][:5]
+#             return [data]
 
 
 
@@ -1393,6 +1465,24 @@ def search_youtube(query):
 )
 @app_commands.describe(search="Titulo o enlace de la cancion")
 async def play(ctx: commands.Context, *, search: str = None):
+    """
+        ### Comando que se encarga de buscar y reproducir canciones
+        ### Usando un texto o url, si no se usan args verificara si hay canciones
+        ### en la cola y si esta reproduciendo una cancion el bot, Si hay cancion y no esta reproduciendo
+        ### audio, reproducira la primera cancion de la cola
+
+        ----------------------------
+
+        **Args:**
+            **ctx:** `(class commands.Context),`
+            **search** `Optional (str)`
+        
+        ----------------------------
+
+        **Returns:**
+            `None`
+            Devuelve directamente a discord
+    """
     # Si el contexto es de una Interaccion (slashCommand)
     # Esto le dice a Discord:
     #“Estoy trabajando, espera por favor…”, y te da 15 minutos para responder sin que la interacción expire.
@@ -1400,9 +1490,13 @@ async def play(ctx: commands.Context, *, search: str = None):
         await ctx.interaction.response.defer(thinking=True)
 
     print("Entro play... Search: ", search)
-    search = search or " "
+    search = search
     idGuild = int(ctx.guild.id)
     #print(type(search), search, search.replace(" ", ""))
+
+    # Guardado el contexto de manera temporal para reconectar y volver a reproducir en caso de errores
+    # Esto tambien se sobre escribe cada vez que se llame el comando play
+    ctx_por_guild[idGuild] = ctx
     try:
         channel = ctx.author.voice.channel
         print("Channel: ", channel, " Channelid: ", channel.id)
@@ -1422,7 +1516,7 @@ async def play(ctx: commands.Context, *, search: str = None):
         await ctx.send(ctx.author.mention,embed=em)
         return
     
-    if not search:
+    if not search or search is None:
         if len(queue[idGuild]) == 0:
             await ctx.send(embed=MensajeBasico("Cola Vacia! :face_with_monocle: ","No hay canciones en la cola\n\nIngrese un link o una cancion para buscarla", DARK_RED), silent=True)
             return
@@ -1433,6 +1527,25 @@ async def play(ctx: commands.Context, *, search: str = None):
                 await reproducir(ctx)
             else:
                 print("Entro else not args play")
+                if ctx.interaction:
+                    await ctx.interaction.followup.send(
+                        embed=MensajeBasico(
+                            "Reanundando / Reproduciendo cancion",
+                            "Reproduciendo la cancion actual en la cola",
+                            DARK_GREEN
+                        ),
+                        ephemeral=True, # Solo visible para el usuario
+                        silent=True
+                    )
+                else:
+                    await ctx.send(
+                        embed=MensajeBasico(
+                            "Reanundando / Reproduciendo cancion",
+                            "Reproduciendo la cancion actual en la cola",
+                            DARK_GREEN
+                        ),
+                        silent=True
+                    )
                 isPaused[idGuild] = False
                 isPlaying[idGuild] = True
                 isInVc[idGuild].resume()
@@ -1542,6 +1655,13 @@ async def play(ctx: commands.Context, *, search: str = None):
     # vc.play(source, after=lambda e: print('Reproducción terminada', e))
 
 def limpiar_cache():
+    """
+        ### Se encarga de limpiar el cache global del autocomplete
+        ### en el comando play
+
+        Analiza la diferencia en segundos desde que se creo el cache para
+        una query en especifico y si execede el tiempo la elimina
+    """
     ahora = time.time()
     try:
         expirados = [k for k, (t, _) in autocomplete_cache.items() if ahora - t > CACHE_TTL]
@@ -1552,6 +1672,20 @@ def limpiar_cache():
         print(f"Fallo la Limpieza de el cache: {e}")
 
 def search_youtube_lite_cached(query: str) -> dict:
+    """
+        Se encarga de hacer una busqueda ligera en youtube
+        Con una query y cachear el resultado
+
+        ----------------------------
+
+        **Args:**
+            **query:** `(str)`
+        
+        ----------------------------
+
+        **Returns:**
+            `(dict)`
+    """
     now = time.time()
     print("Entro search_Lite_cached, query", query)
 
@@ -1721,6 +1855,7 @@ async def spotify(ctx, args):
 
 @elBulloso.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    print("Entro manejo de error SlashCommand")
     await interaction.response.send_message(
         f"❌ Error ejecutando el comando: `{error}`", ephemeral=True
     )
@@ -1763,6 +1898,7 @@ async def on_ready():
         isInVc[idGuild] = None
         isPlaying[idGuild] = False
         isPaused[idGuild] = False
+        desconectado_por_codigo[idGuild] = False
     # print(elBulloso.user.mention)
     # try:
     #     comandos_Sincronizados = await elBulloso.tree.sync()
@@ -1776,13 +1912,37 @@ async def on_ready():
 @elBulloso.listen()
 async def on_voice_state_update(member, before, after):
     idGuild = int(member.guild.id)
+    # Si el bot se queda solo en el canal de voz
     if member.id != elBulloso.user.id and before.channel != None and after.channel != before.channel:
         usuariosEnCanal = before.channel.members
         if len(usuariosEnCanal) == 1 and usuariosEnCanal[0].id == elBulloso.user.id and isInVc[idGuild].is_connected():
             isPlaying[idGuild] = isPaused[idGuild] = False
             queue[idGuild] = []
             queueIndex[idGuild] = 0
+            desconectado_por_codigo[idGuild] = True
+
             await isInVc[idGuild].disconnect()
+
+    # Probando un evento de disconect
+    # para revisar si se perido la conexion con el socket
+    # Y reconectar y reproducir la cancion automaticamente
+    if member.id == elBulloso.user.id and before.channel and not after.channel:
+        if desconectado_por_codigo.get(idGuild):
+            print("✅ El bot fue desconectado manualmente (por comando).")
+            desconectado_por_codigo[idGuild] = False
+        else:
+            print("❌ El bot fue desconectado inesperadamente (kick, socket error).")
+            # Aquí puedes reconectar y continuar
+            if queue[idGuild] and queueIndex[idGuild] < len(queue[idGuild]):
+                ctx = ctx_por_guild.get(idGuild)
+                await asyncio.sleep(2)
+                canal = queue[idGuild][queueIndex[idGuild]][1]
+                if ctx:
+                    await conectarse(elBulloso, canal)
+                    await reproducir(elBulloso)
+                else:
+                    print("⚠️ No hay contexto almacenado para este servidor.")
+
 
 @elBulloso.event
 async def on_close():

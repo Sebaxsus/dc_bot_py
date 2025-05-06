@@ -796,3 +796,11 @@ Test Ejecutado el: 2025-05-06 05:14:55.367573
 Test Func Busqueda_PlaylistTracks_Metadatos optimizado, Tiempo de Ejecucion: 9.76531720161438
 Test func guardarStreamURL optimizado, Tiempo de EjecucionL 31.00823950767517
 Test funcion: busquedaPlaylist optimizado tiempo de ejecucion: 40.77355670928955
+
+Test Ejecutado el: 2025-05-06 18:18:18.199029
+
+Test Ejecutado el: 2025-05-06 18:17:47.905959
+
+Test Ejecutado el: 2025-05-06 18:22:07.601126
+
+Test Ejecutado el: 2025-05-06 18:21:43.048236
