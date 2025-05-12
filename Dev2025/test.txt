@@ -276,3 +276,13 @@ Depurando posible error Artist:
 Test Ejecutado el: 2025-05-06 16:55:42.259208
 
 Test Ejecutado el: 2025-05-06 12:41:37.078121
+
+Test Ejecutado el: 2025-05-06 18:36:06.618651
+
+Test Ejecutado el: 2025-05-07 16:09:55.377221
+
+Test Ejecutado el: 2025-05-07 12:12:18.548533
+
+Test Ejecutado el: 2025-05-08 23:34:07.824052
+
+Test Ejecutado el: 2025-05-08 23:32:31.285179

@@ -1,0 +1,25 @@
+# Carpeta del entorno virtual (si existiera)
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de control de versiones
+.git/
+.gitignore
+
+# Otros temporales
+*.log
+*.tmp
+
+info.txt
+Probando/
+Probando/*.py
+bot.py
+botAntiguo.py

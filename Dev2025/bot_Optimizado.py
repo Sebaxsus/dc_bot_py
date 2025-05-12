@@ -14,9 +14,9 @@ import time, datetime
 thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
 # Archivo txt para guardar log de testing
-archivo_test = open("test.txt", "a")
+# archivo_test = open("test.txt", "a")
 
-archivo_test.write(f"\nTest Ejecutado el: {datetime.datetime.now()}\n")
+# archivo_test.write(f"\nTest Ejecutado el: {datetime.datetime.now()}\n")
 
 env = dotenv.dotenv_values("bot_dc_py/src/.env")
 
@@ -28,7 +28,7 @@ spClientSecret='dc04ddb0ad22464c94a65580f5fdd529'
 spApi = "https://api.spotify.com/v1/"
 spEndPoint = "/track/{track_id}"
 spURI = 'http://localhost:3000'
-spUricall = 'http://google.com/callback/'
+spUricall = 'https://127.0.0.1:5000/callback/'
 tokenBot = 'MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc'
 
 scope = """ugc-image-upload,user-read-playback-state,user-modify-playback-state,user-read-currently-playing,
@@ -38,8 +38,13 @@ app-remote-control,streaming,playlist-read-private,playlist-modify-public,playli
 auth_manager = spotipy.oauth2.SpotifyPKCE(
     client_id=spClientId,
     redirect_uri=spUricall,
-    scope=scope
+    scope=scope,
+    # open_browser=False
 )
+# Para generar la url manual y luego obtener el token manual todo por consola se usa
+# el parametro open_browser=False en auth_manger
+# y auth_manager.get_authorize_url()
+# print("Open web: ", auth_manager.get_authorize_url())
 #auth_manager = spotipy.oauth2.SpotifyClientCredentials(client_id=spClientId, client_secret=spClientSecret)
 # token = auth_manager.get_access_token()
 #token = token_dict['access_token']
@@ -309,7 +314,7 @@ async def guardarCancionesSpList(datos, idGuild, channel):
             #     return
 
             queue[idGuild].append([cancion, channel])
-            archivo_test.write(f"\tTest Funcion guardarCancionesSpList optimizado .to_thread Iteracion:{i} - Tiemo de Ejecucion: {time.time() - start}\n")
+            # archivo_test.write(f"\tTest Funcion guardarCancionesSpList optimizado .to_thread Iteracion:{i} - Tiemo de Ejecucion: {time.time() - start}\n")
             # print(f"Cancion {i}: {cancion['Titulo']} \n\tTiemo de Ejecucion: {time.time() - start}" )
 
     return cancion
@@ -389,14 +394,14 @@ async def busquedaPlaylist(ctx: commands.Context, channel, urlPlaylist: tuple[st
     # Espero a que todas las tareas terminen
     await asyncio.gather(*tareas)
     # print(f"Termino el buscar Playlist track Metadatos, Tiempo de Ejecucion: {time.time() - start}")
-    archivo_test.write(f"Test Func Busqueda_PlaylistTracks_Metadatos optimizado, Tiempo de Ejecucion: {time.time() - start}\n")
+    # archivo_test.write(f"Test Func Busqueda_PlaylistTracks_Metadatos optimizado, Tiempo de Ejecucion: {time.time() - start}\n")
 
     start = time.time()
 
     ultima_Cancion = await guardarStreamUrls(idGuild)
 
     # print(f"Termino el buscar los streamUrl, Tiempo de Ejecucion: {time.time() - start}")
-    archivo_test.write(f"Test func guardarStreamURL optimizado, Tiempo de EjecucionL {time.time() - start}\n")
+    # archivo_test.write(f"Test func guardarStreamURL optimizado, Tiempo de EjecucionL {time.time() - start}\n")
 
     # Devuelvo el ultimo resultado guardado en el ultimo bloque de tareas resuelto
     if not ultima_Cancion:
@@ -473,7 +478,7 @@ def getStream(url):
     with yt_dlp.YoutubeDL(ydl_options) as ydl:
 
         info = ydl.extract_info(url, download=False)
-        archivo_test.write(f"Test Func getStream sin optimizar, Tiempo de Ejecucion: {time.time() - start}\n")
+        # archivo_test.write(f"Test Func getStream sin optimizar, Tiempo de Ejecucion: {time.time() - start}\n")
         return {
             'Titulo': info.get('title'),
             'link': f"https://www.youtube.com/watch?v={info.get('id')}",
@@ -1563,7 +1568,7 @@ async def play(ctx: commands.Context, *, search: str = None):
                 search = veriSearch
                 start = time.time()
                 cancion = await busquedaPlaylist(ctx, channel, search)
-                archivo_test.write(f"Test funcion: busquedaPlaylist optimizado tiempo de ejecucion: {time.time() - start}\n")
+                # archivo_test.write(f"Test funcion: busquedaPlaylist optimizado tiempo de ejecucion: {time.time() - start}\n")
                 # print(f"\tTermino BusquedaPlaylistSp\nUtlima_CancionPl: {cancion}\n tiempo de ejecucion: ", time.time() - start)
             case "spotify_album":
                 search = veriSearch
@@ -1877,10 +1882,10 @@ async def on_ready():
     # elBulloso.tree.clear_commands(guild=None)  # Limpia globales
     # print(f"Comandos actualizados y limpiados.")
     elBulloso.bot_loop = asyncio.get_running_loop()
-
-    cliente = spotipy.Spotify(auth_manager=auth_manager)
+    
 
     try:
+        cliente = spotipy.Spotify(auth_manager=auth_manager)
         #print(token)
         user_name = cliente.current_user() 
     except:
