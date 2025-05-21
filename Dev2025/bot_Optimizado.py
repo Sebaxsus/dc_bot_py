@@ -1,8 +1,11 @@
 import discord 
 from discord import app_commands
 from discord.ext import commands
+import discord.ext.commands
+import discord.gateway
 import spotipy, dotenv, yt_dlp, asyncio, functools, datetime, concurrent.futures
 
+import discord.ext
 from utils import esUrl
 from yt_wrapper import buscar_metadatos, buscar, obtener_stream, shutdown_executor
 
@@ -67,6 +70,8 @@ cliente = spotipy.Spotify(auth_manager=auth_manager)
 #Colores embed Azul= 0x2c76dd, Rojo= 0xdf1141, Verde= 0x0eaa51
 AZUL,ROJO,VERDE,DARK_PURPLE,DARK_BLUE = 0x2c76dd, 0xdf1141,0x0eaa51,0x71368A,0x206694
 TEAL,DARK_RED,DARK_GREEN = 0x1ABC9C, 0x992D22,0x1F8B4C
+# Estos colores son en formato hexadecimal, se pueden cambiar a gusto
+# Pero python los interpreta como enteros, por lo que no se pueden usar comillas
 
 
 #El intents es indispensable, Se usa para que el bot y la libreria obtenga informacion de
@@ -125,7 +130,28 @@ FFMPEG_OPTIONS = {
     'options': '-vn',
     }
 
-def verificarTokenSpotify():
+def verificarTokenSpotify() -> None:
+    """
+    - Verifica si el token de spotify ha expirado, si es asi lo renueva
+    - Si el token no ha expirado, no hace nada.
+    - Si el token no es valido, lanza una excepcion y no hace nada.
+    - Si el token es valido, lo guarda en la variable global token.
+
+    ---------------------
+
+    **Parameters:**
+        **None**
+
+    ---------------------
+
+    **Returns:**
+        **None**
+
+    [Mas info sobre el token de spotify](https://spotipy.readthedocs.io/en/2.22.1/#spotipy.oauth2.SpotifyPKCE)
+    [Mas info sobre el flujo del token de spotify](https://developer.spotify.com/documentation/general/guides/authorization-guide/)
+    [Mas info sobre el flujo de autorizacion del token de spotify](https://developer.spotify.com/documentation/general/guides/authorization-guide/#authorization-code-flow)
+    [Mas info sobre el flujo de autorizacion del token de spotify](https://developer.spotify.com/documentation/general/guides/authorization-guide/#authorization-code-flow-with-proof-key-for-code-exchange-pkce)
+    """
     global token
     print("Entro a verificar token")
     tokenAuthSpotify = auth_manager.get_cached_token()
@@ -142,7 +168,25 @@ def verificarTokenSpotify():
         else:
             print(f"Se extendio el tiempo del token:\nExpiro el token?: {auth_manager.is_token_expired(tokenAuthSpotify)}")
 
-def MensajeBasico(titulo, texto, color) -> discord.embeds.Embed:
+def MensajeBasico(titulo: str, texto: str, color: int) -> discord.Embed:
+    """
+    - Crea un mensaje embed basico para enviar al canal de discord
+    
+    ---------------------
+    **Parameters:**
+        **titulo:** `(str)`
+        **texto:** `(str)`
+        **color:** `(int)`
+        **icon_Url:** `(str) | url de la foto de perfil del bot`
+        
+    ---------------------
+    
+    **Returns**
+        `discord.embeds.Embed`
+    
+    [Mas info sobre discord.Embed](https://discordpy.readthedocs.io/en/stable/api.html#discord.Embed)
+    [Mas info sobre los hexadecimales](https://www.w3schools.com/python/python_strings_methods.asp)
+    """
     em = discord.Embed(
             title=titulo,
             description=texto,
@@ -150,43 +194,6 @@ def MensajeBasico(titulo, texto, color) -> discord.embeds.Embed:
         )
     em.set_footer(icon_url=elBulloso.user.display_avatar)
     return em
-
-def embed_Reproduciendo_Ahora(ctx, cancion):
-    Titulo = cancion['Titulo']
-    link = cancion['link']
-    #link = 'prueba'
-    miniatura = cancion['Miniatura']
-    Canal = cancion['Canal']
-    Duracion = cancion['Duracion']
-    usuario = ctx.author
-    #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
-    pfp = usuario.display_avatar
-    embed = discord.Embed(
-        title="* Reproduciendo:",
-        description=f'[{Titulo}]({link})',
-        colour=0x2c76dd
-    )
-    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
-    embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
-    embed.set_author(name=f"{Canal}")
-    return embed
-
-def format_audio_seconds(seconds):
-    if seconds is None:
-        return "desconocido"
-    mins, secs = divmod(int(seconds), 60)
-    return f"{mins}:{secs:02}"
-
-
-def formatear_link(link: str) -> str:
-    # Eliminar parámetros innecesarios de YouTube
-    if "youtube.com/watch" in link and "&" in link:
-        link = link.split("&")[0]
-    # Normalizar links de Spotify
-    if "spotify.com/track/" in link:
-        link = link.split("?")[0]
-    return link.strip()
 
 # def buscar_metadatos(query: str) -> dict:
 #     opciones = {
@@ -238,6 +245,34 @@ def formatear_link(link: str) -> str:
 #         return cancion
 
 async def procesarBloqueStream(idGuild: int, bloque: list) -> list:
+    """
+    - Procesa un bloque de canciones para obtener el streamUrl de cada cancion
+    en un bloque de 5 canciones dentro de un proceso asincrono alterno para evitar
+    que la busqueda consuma los recursos del proceso principal (bot) y no genere un GIL (Global Interpreter Lock),
+    si la cancion ya tiene el streamUrl se agrega a una lista de canciones validas,
+    si no tiene el streamUrl se agrega a una lista de canciones removidas, 
+    si se obtiene el streamUrl se agrega a una lista de canciones validas, 
+    al final devuelve la lista de canciones validas.
+
+    ----------------------------
+
+    **Parameters:**
+        **idGuild:** `(int)`,
+        **bloque:** `(list)`
+
+    ----------------------------
+
+    **Returns:**
+        **`(list):`**
+            - **canciones_validas**: Lista de canciones con streamUrl obtenida.
+
+    [Mas info sobre asyncio](https://docs.python.org/3/library/asyncio-task.html#asyncio.gather)
+    [Mas info sobre el GIL](https://realpython.com/python-concurrency/)
+    [Mas info sobre el GIL y el ThreadPoolExecutor](https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor)
+    [Mas info sobre el GIL y el asyncio](https://docs.python.org/3/library/asyncio-task.html#asyncio.Task)
+    [Mas info sobre el GIL y el asyncio.gather](https://docs.python.org/3/library/asyncio-task.html#asyncio.gather)
+    [Mas info sobre el GIL y el asyncio.run](https://docs.python.org/3/library/asyncio-task.html#asyncio.run)
+    """
     canciones_validas = []
     removidas = []
 
@@ -261,7 +296,31 @@ async def procesarBloqueStream(idGuild: int, bloque: list) -> list:
 
     return canciones_validas
 
-async def guardarStreamUrls(idGuild: int):
+async def guardarStreamUrls(idGuild: int) -> dict|None:
+    """
+    - Recorre las cola de reproduccion de una guild en especifico
+    para dividir sus canciones en bloques de **5** canciones,
+    Cada uno de estos bloques se procesaran de manera asincrona y paralela
+    para obtener el streamUrl de cada cancion, luego se guardaran
+    en la cola de reproduccion y se reemplazara la cola de reproduccion
+    de la guild con la nueva lista de canciones.
+
+    ----------------------------
+
+    **Parameters:**
+        **idGuild:** `(int)`
+
+    ----------------------------
+
+    **Returns:**
+        **`(dict):`**
+            - **Titulo `(str)`**: Titulo del video.
+            - **link `(str)`:** Url/Link del video.
+            - **streamUrl `(str)`:** Url/Link del stream de bits.
+            - **Canal `(str)`:** Nombre de usuario del canal que subio el video.
+            - **Duracion `(str)`:** Duracion del video formateado en `MM:SS`.
+            - **Miniatura `(str)`:** Url/Link de la minuatura del video.
+    """
     bloques = [queue[idGuild][i:i + 5] for i in range(0, len(queue[idGuild]), 5)]
     tareas = []
 
@@ -284,7 +343,23 @@ async def guardarStreamUrls(idGuild: int):
         return None
 
 
-def nombreArtiCancionPlaylistTrack(datosTrack) -> str:
+def nombreArtiCancionPlaylistTrack(datosTrack: dict) -> str:
+    """
+    - Recibe un objeto con todos los metadatos de una cancion
+    dentro de una playlist o album y obtiene los nombres de todos
+    sus artistas y el nombre de la cancion
+
+    ----------------------------
+
+    **Parameters:**
+        **datosTrack:** `(dict)`
+
+    ----------------------------
+
+    **Returns:**
+        **`(str):`**
+            "Titulo - Artistas"
+    """
     # print("entro nombrarArticacnionPlaylistTrac")
     artistaN = ""
     artistas = datosTrack['artists']
@@ -294,13 +369,38 @@ def nombreArtiCancionPlaylistTrack(datosTrack) -> str:
 
     return f"{cancion} - {artistaN}"
 
-async def guardarCancionesSpList(datos, idGuild, channel):
+async def guardarCancionesSpList(datos: list, idGuild: int, channel: discord.VoiceChannel) -> dict:
+    """
+    - Obtiene los metadatos de todas las canciones de una playlist de spotify,
+    luego les saca los metadatos necesarios y por ultimo guarda cada cancion
+    en la cola de reproduccion.
+
+    ----------------------------
+
+    **Parameters:**
+        **datos:** `(list)`,
+        **idGuild:** `(int)`,
+        **channel:** `(class discord.VoiceChannel)`
+    
+    ----------------------------
+
+    **Returns:**
+        **`(dict):`**
+            - **Titulo `(str)`**: Titulo del video.
+            - **link `(str)`:** Url/Link del video.
+            - **streamUrl `(str)`:** Url/Link del stream de bits.
+            - **Canal `(str)`:** Nombre de usuario del canal que subio el video.
+            - **Duracion `(str)`:** Duracion del video formateado en `MM:SS`.
+            - **Miniatura `(str)`:** Url/Link de la minuatura del video.
+
+    [Info sobre la lib de spotify](https://spotipy.readthedocs.io/en/2.22.1/)
+    """
     # print("Entro guardarCancionesSpList ")
     # Datos es una lista que contiene todas las canciones de la Playlist
     # Dentro, es decir que su length es la cantidad de canciones dentro de la lista
     cancion = None
     for i, track in enumerate(datos):
-        start = time.time()
+        # start = time.time()
         datosTrack = track['track']
         if datosTrack is None:
             pass
@@ -319,13 +419,38 @@ async def guardarCancionesSpList(datos, idGuild, channel):
 
     return cancion
 
-async def guardaCancionesSpAlbum(datos, idGuild, channel):
+async def guardaCancionesSpAlbum(datos: list, idGuild: int, channel: discord.VoiceChannel) -> dict:
+    """
+    - Obtiene los metadatos de todas las canciones de un album de spotify,
+    luego les saca los metadatos necesarios y por ultimo guarda cada cancion
+    en la cola de reproduccion.
+
+    ----------------------------
+
+    **Parameters:**
+        **datos:** `(list)`,
+        **idGuild:** `(int)`,
+        **channel:** `(class discord.VoiceChannel)`
+    
+    ----------------------------
+
+    **Returns:**
+        **`(dict):`**
+            - **Titulo `(str)`**: Titulo del video.
+            - **link `(str)`:** Url/Link del video.
+            - **streamUrl `(str)`:** Url/Link del stream de bits.
+            - **Canal `(str)`:** Nombre de usuario del canal que subio el video.
+            - **Duracion `(str)`:** Duracion del video formateado en `MM:SS`.
+            - **Miniatura `(str)`:** Url/Link de la minuatura del video.
+
+    [Info sobre la lib de spotify](https://spotipy.readthedocs.io/en/2.22.1/)
+    """
     # print("entro guardaCancionesSpAlbum ")
     # Datos es una lista que contiene todas las canciones de la Playlist
     # Dentro, es decir que su length es la cantidad de canciones dentro de la lista
     cancion = None
     for i, track in enumerate(datos):
-        start = time.time()
+        # start = time.time()
         strCancion = nombreArtiCancionPlaylistTrack((track))
         cancion = await buscar_metadatos(strCancion)
         # try:
@@ -339,7 +464,42 @@ async def guardaCancionesSpAlbum(datos, idGuild, channel):
 
     return cancion
 
-async def busquedaPlaylist(ctx: commands.Context, channel, urlPlaylist: tuple[str, str]):
+async def busquedaPlaylist(ctx: commands.Context, channel: discord.VoiceChannel, urlPlaylist: tuple[str, str]) -> dict:
+    """
+    - Busca los metadatos de todas las canciones en una playlist de spotify
+    dividiendo la carga de busqueda en bloques de **5** canciones, Cada bloque
+    se manda a una funcion asincrona (Corutina) resolviendo primero el primer bloque para
+    reproducir las primeras canciones apenas esten disponibles para no dejar el bot
+    pensando mientras busca los metadatos de cada cancion,
+
+    - Luego de completar el primer bloque creo una lista de tareas asincrona (Lista de corutinas)
+    que se encargara de resolver los bloques de canciones restantes de manera asincrona y paralela,
+
+    - Cuando se complete la lista de tareas asincronas (Corutinas) llamo otra funcion que se encargara
+    de obtener la url de stream de bits de cada cancion dentro de las canciones en la cola de reproduccion,
+
+    - Por ultimo devolvera los metadatos de la ultima cancion en cola con su streamUrl ya obtenida.
+    
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`,
+        **channel:** `(class discord.VoiceChannel)`,
+        **urlPlaylist:** `(tuple[str, str])` | [0]: tipo_de_url, [1]: url.
+
+    ----------------------------
+
+    **Returns:**
+        `**(dict):**`
+         - **Titulo `(str)`:** Titulo del video.
+         - **link `(str)`:** Url/Link del video.
+         - **streamUrl `(str)`:** Url/Link del stream de bits.
+         - **Canal `(str)`:** Nombre de usuario del canal que subio el video.
+         - **Duracion `(str)`:** Duracion del video formateado en `MM:SS`.
+         - **Miniatura `(str)`:** Url/Link de la minuatura del video.
+
+    [Info sobre la lib de spotify](https://spotipy.readthedocs.io/en/2.22.1/)
+    """
     start = time.time()
     # print("Entro busqueda playlist SP")
     idGuild = int(ctx.guild.id)
@@ -410,7 +570,42 @@ async def busquedaPlaylist(ctx: commands.Context, channel, urlPlaylist: tuple[st
     else:
         return ultima_Cancion
 
-async def busquedaAlbum(ctx: commands.Context, channel, urlPlaylist: tuple[str, str]):
+async def busquedaAlbum(ctx: commands.Context, channel: discord.VoiceChannel, urlPlaylist: tuple[str, str]) -> dict:
+    """
+    - Busca los metadatos de todas las canciones en un album de spotify
+    dividiendo la carga de busqueda en bloques de **5** canciones, Cada bloque
+    se manda a una funcion asincrona (Corutina) resolviendo primero el primer bloque para
+    reproducir las primeras canciones apenas esten disponibles para no dejar el bot
+    pensando mientras busca los metadatos de cada cancion,
+
+    - Luego de completar el primer bloque creo una lista de tareas asincrona (Lista de corutinas)
+    que se encargara de resolver los bloques de canciones restantes de manera asincrona y paralela,
+
+    - Cuando se complete la lista de tareas asincronas (Corutinas) llamo otra funcion que se encargara
+    de obtener la url de stream de bits de cada cancion dentro de las canciones en la cola de reproduccion,
+
+    - Por ultimo devolvera los metadatos de la ultima cancion en cola con su streamUrl ya obtenida.
+    
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`,
+        **channel:** `(class discord.VoiceChannel)`,
+        **urlPlaylist:** `(tuple[str, str])` | [0]: tipo_de_url, [1]: url.
+
+    ----------------------------
+
+    **Returns:**
+        `**(dict):**`
+         - **Titulo `(str)`:** Titulo del video.
+         - **link `(str)`:** Url/Link del video.
+         - **streamUrl `(str)`:** Url/Link del stream de bits.
+         - **Canal `(str)`:** Nombre de usuario del canal que subio el video.
+         - **Duracion `(str)`:** Duracion del video formateado en `MM:SS`.
+         - **Miniatura `(str)`:** Url/Link de la minuatura del video.
+
+    [Info sobre la lib de spotify](https://spotipy.readthedocs.io/en/2.22.1/)
+    """
     # print("Entro busqueda album")
     idGuild = int(ctx.guild.id)
 
@@ -472,7 +667,31 @@ async def busquedaAlbum(ctx: commands.Context, channel, urlPlaylist: tuple[str, 
         #     duration = entry_info.get("duration",0)
         #     search_results.append(entry_info)
 
-def getStream(url):
+def getStream(url: str) -> dict:
+    """
+    - Obtiene la url del stream de bits usando una\n
+     url de un video en Youtube,
+    - Devuelve un diccionario con los metadatos del video y\n
+     la url del stream de bits.
+
+    ----------------------------
+
+    **Parameters:**
+        **url:** `(str)`
+    
+    ----------------------------
+
+    **Returns:**
+        `**(dict):**`
+         - **Titulo `(str)`**: Titulo del video.
+         - **link `(str)`:** Url/Link del video.
+         - **streamUrl `(str)`:** Url/Link del stream de bits.
+         - **Canal `(str)`:** Nombre de usuario del canal que subio el video.
+         - **Duracion `(str)`:** Duracion del video formateado en `MM:SS`.
+         - **Miniatura `(str)`:** Url/Link de la minuatura del video.
+
+    [Mas info sobre la lib de scrapping yt](https://github.com/yt-dlp/yt-dlp#readme)
+    """
     print("Entro get stream, url: ", url)
     start = time.time()
     with yt_dlp.YoutubeDL(ydl_options) as ydl:
@@ -488,7 +707,29 @@ def getStream(url):
             'Miniatura': info['thumbnail']
         }
     
-def embed_Reproduciendo_Ahora(ctx, cancion):
+def embed_Reproduciendo_Ahora(ctx: commands.Context, cancion: dict) -> discord.Embed:
+    """
+    - Devuelve un embed de la libreria discord\n
+     con los metadatos de una cancion con el siguiente formato
+     - Titulo `(str)`
+     - descripcion `(str)`
+     - colour `(str(hex))`
+     - Duracion `(str)`
+     - Miniatura `(str)`
+     - Footer `(str)`
+     - Author `(str)`
+    
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`,
+        **cancion:** `(dict)`
+    
+    ----------------------------
+
+    **Returns:**
+        `(Embed discord.Embed)`
+    """
     Titulo = cancion['Titulo']
     link = cancion['link']
     #link = 'prueba'
@@ -499,17 +740,39 @@ def embed_Reproduciendo_Ahora(ctx, cancion):
     #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
     pfp = usuario.display_avatar
     embed = discord.Embed(
-        title="* Reproduciendo:",
+        title="- **Reproduciendo:**",
         description=f'[{Titulo}]({link})',
         colour=0x2c76dd
     )
-    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
+    embed.add_field(name="- **Duracion:**", value=f"""```cs\n\t{Duracion}```""")
     embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_footer(text=f'Cancion de: **{str(usuario)}**', icon_url=pfp)
     embed.set_author(name=f"{Canal}")
     return embed
 
-def embed_Añadido_Queue(ctx, cancion):
+def embed_Añadido_Queue(ctx: commands.Context, cancion: dict) -> discord.Embed:
+    """
+    - Devuelve un embed de la libreria discord\n
+     con los metadatos de una cancion con el siguiente formato
+     - Titulo `(str)`
+     - descripcion `(str)`
+     - colour `(str(hex))`
+     - Duracion `(str)`
+     - Miniatura `(str)`
+     - Footer `(str)`
+     - Author `(str)`
+    
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`,
+        **cancion:** `(dict)`
+    
+    ----------------------------
+
+    **Returns:**
+        `(Embed discord.Embed)`
+    """
     Titulo = cancion['Titulo']
     link = cancion['link']
     #link = 'prueba'
@@ -520,17 +783,39 @@ def embed_Añadido_Queue(ctx, cancion):
     #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
     pfp = usuario.display_avatar
     embed = discord.Embed(
-        title="* Añadido a la cola:",
+        title="- **Añadido a la cola:**",
         description=f'[{Titulo}]({link})',
         colour=DARK_PURPLE
     )
-    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
+    embed.add_field(name="- **Duracion:**", value=f"""```cs\n\t{Duracion}```""")
     embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_footer(text=f'Cancion de: **{str(usuario)}**', icon_url=pfp)
     embed.set_author(name=f"{Canal}")
     return embed
 
-def embed_Eliminado_Queue(ctx, cancion):
+def embed_Eliminado_Queue(ctx: commands.Context, cancion: dict) -> discord.Embed:
+    """
+    - Devuelve un embed de la libreria discord\n
+     con los metadatos de una cancion con el siguiente formato
+     - Titulo `(str)`
+     - descripcion `(str)`
+     - colour `(str(hex))`
+     - Duracion `(str)`
+     - Miniatura `(str)`
+     - Footer `(str)`
+     - Author `(str)`
+    
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`,
+        **cancion:** `(dict)`
+    
+    ----------------------------
+
+    **Returns:**
+        `(Embed discord.Embed)`
+    """
     Titulo = cancion['Titulo']
     link = cancion['link']
     #link = 'prueba'
@@ -541,17 +826,32 @@ def embed_Eliminado_Queue(ctx, cancion):
     #print(f'Autor en funcion embed: {ctx.author}, Tipo: {type(ctx.author)}') #Autor en funcion embed: sebaxsus, Tipo: <class 'discord.member.Member'>
     pfp = usuario.display_avatar
     embed = discord.Embed(
-        title="* Eliminado de la Cola:",
+        title="- **Eliminado de la Cola:**",
         description=f'[{Titulo}]({link})',
         colour=DARK_RED
     )
-    embed.add_field(name="* Duracion", value=f"""```cs\n\t{Duracion}```""")
+    embed.add_field(name="- **Duracion:**", value=f"""```cs\n\t{Duracion}```""")
     embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
+    embed.set_footer(text=f'Cancion de: **{str(usuario)}**', icon_url=pfp)
     embed.set_author(name=f"{Canal}")
     return embed
 
-async def mensaje(ctx, cancion):
+async def mensaje(ctx: commands.Context, cancion: dict):
+    """
+    - Manda un mensaje de tipo embed al chat de discord\n
+     con los metadatos de una cancion.
+
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`,
+        **cancion:** `(dict)`
+    
+    ----------------------------
+
+    **Returns:**
+        `Mensaje de tipo embed en discord`
+    """
     #idGuild = int(ctx.guild.id)
     #corutina = ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
     em = embed_Reproduciendo_Ahora(ctx, cancion)
@@ -577,6 +877,22 @@ async def mensaje(ctx, cancion):
 )
 @app_commands.describe(nombre="Nombre exacto del usuario (no el nickname)")
 async def ping(ctx: commands.Context, *, nombre: str = None):
+    """
+    - Devuelve un mensaje mencionando a un usuario especificado
+
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`,
+        **nombre:** `(str)` | `*Optional*`
+    
+    ----------------------------
+
+    **Returns:**
+        `Mensaje en discord`
+
+    [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+    """
     if not nombre:
         await ctx.send(f'Pong :ping_pong:')
         return
@@ -625,6 +941,22 @@ async def ping(ctx: commands.Context, *, nombre: str = None):
         help = "Este comando manda un mensaje con la informacion del servidor.",
 )
 async def info(ctx: commands.Context):
+    """
+    - Muestra la informacion de la guild en donde\n
+     se uso el comando
+
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`
+
+    ----------------------------
+
+    **Returns:**
+        `Mensaje de tipo embed en discord`
+
+    [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+    """
     embed = discord.Embed(
         title=f'{ctx.guild.name}',
         description=f"La mierda mas grande jamas vista {datetime.datetime.now(datetime.timezone.utc)}",
@@ -649,6 +981,24 @@ def truncar_titulo(titulo: str, max_length: int = 60) -> str:
     help="Commando para mostrar las canciones en la cola actual.",
 )
 async def cola(ctx: commands.Context):
+    """
+    - Revisa si hay canciones en la cola de reproduccion\n
+     de la guild en donde se uso el comando y muestra una lista
+     dentro de un mensaje embed con las siguientes 20 canciones
+     y establece un footer con la cantidad de canciones dentro de la cola.
+
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`
+    
+    ----------------------------
+
+    **Returns:**
+        `Mensaje de tipo embed en discord`
+
+    [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+    """
     idGuild = int(ctx.guild.id)
     # print(f"Entro a cola de reproduccion:\n  Numero actual de la cola: {queueIndex[idGuild]}\n  Titulo Cancion actual: {queue[idGuild][queueIndex[idGuild]][0].get("Titulo")}")
     if not queue[idGuild]:
@@ -702,15 +1052,15 @@ async def cola(ctx: commands.Context):
     for i in range(queueIndex[idGuild], maxRange):
         returnIndex = i - queueIndex[idGuild]
         cancion = queue[idGuild][i][0]
-        titulo = "▶️ **Escuchando**" if returnIndex == 0 else ("⏭️ Siguiente" if returnIndex == 1 else f"🎵 - {returnIndex} - {truncar_titulo(cancion["Titulo"])}")
-        mensaje = f"**[{cancion['Titulo']}]({cancion['link']})**\n- **{cancion['Canal']} {cancion['Duracion']}**" if returnIndex == 0 else (f"[{cancion['Titulo']}]({cancion['link']})\n- {cancion['Canal']} {cancion['Duracion']}")
+        titulo = f"[{returnIndex}]. ▶️ **Escuchando**" if returnIndex == 0 else (f"[{returnIndex}]. ⏭️ **Siguiente**" if returnIndex == 1 else f"[{returnIndex}]. 🎵 - **{truncar_titulo(cancion["Titulo"])}**")
+        mensaje = f" - *[{cancion['Titulo']}]({cancion['link']})*\n - *{cancion['Canal']}* | `{cancion['Duracion']}`" if returnIndex == 0 else (f" - *[{cancion['Titulo']}]({cancion['link']})*\n - *{cancion['Canal']}* | `{cancion['Duracion']}`\n===")
         colaEmbed.add_field(
             name=titulo,
             value=mensaje,
             inline=False
         )
 
-    colaEmbed.set_footer(text=f"🎶 Total de canciones en cola: {totalSongs}")
+    colaEmbed.set_footer(text=f"`🎶 Total de canciones en cola: **{totalSongs}**`")
     await ctx.send(
         embed=colaEmbed,
         silent=True
@@ -760,6 +1110,21 @@ async def cola(ctx: commands.Context):
     help="Commando para limpiear/Eliminar la cola de reproduccion.",
 )
 async def limpiar(ctx: commands.Context):
+    """
+    - Limpia la cola de reproduccion de la guild en donde se uso el comando.
+
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`
+    
+    ----------------------------
+
+    **Returns:**
+        `Mensaje de tipo embed en discord`
+    
+    [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+    """
     idGuild = int(ctx.guild.id)
 
     usuario = ctx.author
@@ -798,6 +1163,27 @@ async def limpiar(ctx: commands.Context):
 )
 @app_commands.describe(cancion="Elige una cancion de la cola")
 async def eliminar(ctx: commands.Context, cancion: str = None):
+    """
+    - Se encarga de validar que halla canciones en la queue
+    - Elminina la ultima cancion en la queue si no se pasan argumentos\n
+     y si pasa un argumento elimina la cancion en ese indice
+    - por ultimo envia un mensaje en discord para dar contexto\n
+     de que elimino correctamente la cancion o que fallo
+    
+    ----------------------------
+
+    **Parameters:**
+        **ctx:** `(class discord.ext.commands.Context)`,
+        **cancion:** `(str)` | `*Optional*`
+    
+    ----------------------------
+
+    **Returns:**
+        `Mensaje del tipo embed en discord`
+
+    [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+    [Mas info sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
+    """
     idGuild = int(ctx.guild.id)
 
     # await ctx.send(
@@ -853,6 +1239,23 @@ async def eliminar(ctx: commands.Context, cancion: str = None):
 
 @eliminar.autocomplete("cancion")
 async def eliminar_autocomplete(interaction: discord.Interaction, current: str):
+    """
+        - Revisa dentro de una interaccion (SlashCommand) si hay canciones en la cola de reproduccion,\n
+         Muestra los primeros 25 resultados dentro de la cola de reproduccion
+
+        ----------------------------
+
+        **Parameters:**
+            **interaction:** `(class discord.Interaction)`,
+            **current:** `(str)`
+        
+        ----------------------------
+
+        **Returns:**
+            `Lista de opciones dentro de la interaccion`
+
+        [Mas info sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
+    """
     idGuild = interaction.guild.id
 
     if not queue[idGuild]:
@@ -870,13 +1273,43 @@ async def eliminar_autocomplete(interaction: discord.Interaction, current: str):
     help="Commando para detener la cancion actual.",
 )
 async def pause(ctx: commands.Context):
+    """
+        - Pausa la reproduccion de musica si el bot\n
+         Esta en un canal de voz,
+        
+        - Si el bot no esta en un canal de voz,\n
+         no hay canciones en la cola o no esta reproduciendo una cancion
+
+        ----------------------------
+
+        **Parameters:**
+            **ctx:** `(class discord.ext.commands.Context)`
+        
+        ----------------------------
+
+        **Returns:**
+            `Mensaje en discord de tipo embed`
+        
+        [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+    """
     idGuild = int(ctx.guild.id)
 
     if not isInVc[idGuild]:
         await ctx.send(
             embed=MensajeBasico(
-                "No se pudo Pausar :face_exhaling: ",
+                "**No se pudo Pausar :face_exhaling: **",
                 "No se puede pausar una cancion\nSi no estoy en un chat de voz.",
+                ROJO
+            ),
+            silent=True
+        )
+
+    elif not queue[idGuild]:
+
+        await ctx.send(
+            embed=MensajeBasico(
+                "**No se pudo Pausar :face_exhaling: **",
+                "No se puede pausar una cancion\nSi no hay canciones en la cola.",
                 ROJO
             ),
             silent=True
@@ -886,7 +1319,7 @@ async def pause(ctx: commands.Context):
 
         await ctx.send(
             embed=MensajeBasico(
-                "Pausando! :sleeping: ",
+                "**Pausando! :sleeping: **",
                 "Pausando la cancion!.",
                 DARK_GREEN
             ),
@@ -903,22 +1336,53 @@ async def pause(ctx: commands.Context):
     help="Commando para volver a reproducir una cancion pausada",
 )
 async def resume(ctx: commands.Context):
+    """
+        - Revisa que el bot este en un chat de voz de una guild,\n
+         que no este pausado (Verifica el diccionario de estado isPaused )\n
+         y que la cola de reproduccion tenga canciones.
+
+        - Si esta en un chat de voz y esta pausado, volvera a reproducir la primera\n
+         cancion de la cola de reproduccion
+
+        ----------------------------
+
+        **Parameters:**
+            **ctx:** `(class discord.ext.commands.Context)`
+        
+        ----------------------------
+
+        **Returns:**
+            `Mensaje en discord de tipo embed`
+        
+        [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+    """
     # print("Resumiendo...")
     idGuild = int(ctx.guild.id)
 
     if not isInVc[idGuild]:
         await ctx.send(
             embed=MensajeBasico(
-                "No se pudo reanudar :nerd: ",
+                "**No se pudo Pausar :face_exhaling: **",
+                "No se puede pausar una cancion\nSi no estoy en un chat de voz.",
+                ROJO
+            ),
+            silent=True
+        )
+    elif not queue[idGuild]:
+
+        await ctx.send(
+            embed=MensajeBasico(
+                "**No se pudo reanudar :nerd: **",
                 "No hay canciones por reproducir.",
                 ROJO
             ),
             silent=True
         )
+
     elif isPaused[idGuild]:
         await ctx.send(
             embed=MensajeBasico(
-                "Reanudando! :upside_down: ",
+                "**Reanudando! :upside_down: **",
                 "Reanudando la cancion!.",
                 DARK_GREEN
             ),
@@ -936,6 +1400,25 @@ async def resume(ctx: commands.Context):
 )
 @app_commands.describe(cancion="Cancion a la que quieres saltar!")
 async def skip(ctx: commands.Context, cancion: str = None):
+    """
+        - Salta a una cancion determinada o solo una cancion\n
+         dentro de la cola de reproduccion si hay canciones y\n
+         hay una cancion adelante.
+
+        ----------------------------
+
+        **Parameters:**
+            **ctx:** `(class commands.Context)`,
+            **cancion:** `(str)` | `*Optional*`
+
+        ----------------------------
+
+        **Returns:**
+            `(dict)`
+
+        [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+        [Mas info sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
+    """
     #print("".join(arg))
     # arg = " ".join(arg)
     #print(not arg, type(arg), arg == type(arg))
@@ -947,7 +1430,7 @@ async def skip(ctx: commands.Context, cancion: str = None):
         await ctx.send(
             ctx.author.mention,
             embed=MensajeBasico(
-                "No se pudo skipear :nerd: ",
+                "**No se pudo skipear :nerd: **",
                 f"{ctx.author.mention} El bulloso Necesita estar en un canal de voz para usar ester comando!",
                 DARK_RED
             ),
@@ -958,8 +1441,8 @@ async def skip(ctx: commands.Context, cancion: str = None):
     if not queue[idGuild] or queueIndex[idGuild] >= len(queue[idGuild]):
         await ctx.send(
             embed=MensajeBasico(
-                "No hay canciones en la cola! :dizzy_face:",
-                f"No puede saltar mas canciones de las que hay en la cola\nCanciones en cola: {len(queue[idGuild])}",
+                "**No hay canciones en la cola! :dizzy_face: **",
+                f"No puede saltar mas canciones de las que hay en la cola\n**Canciones en cola: `{len(queue[idGuild])}`**",
                 DARK_PURPLE
             ),
             silent=True
@@ -972,8 +1455,8 @@ async def skip(ctx: commands.Context, cancion: str = None):
         if index >= len(queue[idGuild]) or index <= queueIndex[idGuild]:
             await ctx.send(
                 embed=MensajeBasico(
-                    "Indice de canción no válido o ya reproducido! :dizzy_face:",
-                    f"No puede saltar mas canciones de las que hay en la cola\nCanciones en cola: {len(queue[idGuild])}",
+                    "** Indice de canción no válido o ya reproducido! :dizzy_face: **",
+                    f"No puede saltar mas canciones de las que hay en la cola\n**Canciones en cola: `{len(queue[idGuild])}`**",
                     DARK_PURPLE
                 ),
                 silent=True
@@ -1050,6 +1533,31 @@ async def skip(ctx: commands.Context, cancion: str = None):
 
 @skip.autocomplete("cancion")
 async def skip_autocomplete(interaction: discord.Interaction, current: str):
+    """
+        - Se encarga de verificar la cola de reproduccion en la guild\n
+         donde se genero el comando, Devuelve a la interacion de discord\n
+         Las siguientes 25 canciones si hay canciones en la cola, si no\n
+         Devuelve un arreglo(Vector,Lista) vacio a la interacion de discord.
+
+        - Al comando skip le devuelve si se pasa el indice de la cancion en formato string
+
+        - Current hace referencia al input del usuario durante la interaccion\n
+         En este caso el numero especifico de cancion a saltar.
+
+        ----------------------------
+
+        **Parameters:**
+            **interaction:** `(class discord.Interaction)`,
+            **current:** `(str)`
+
+        ----------------------------
+
+        **Returns:**
+            `(str(int))`
+
+        [Mas info sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
+    """
+    print("Cancion actual: ", current)
     idGuild = interaction.guild.id
     if not queue[idGuild]:
         return []
@@ -1078,8 +1586,27 @@ async def skip_autocomplete(interaction: discord.Interaction, current: str):
 )
 @app_commands.describe(cancion="Canción anterior a la que deseas volver")
 async def previus(ctx: commands.Context, cancion: str = None):
+    """
+        - Se encarga de devolver la cancion de la cola de reproduccion\n
+         de la guild en donde se uso el comando, Puede devolverse un numero\n
+         determido de canciones o solo una.
+
+        ----------------------------
+
+        **Parameters:**
+            **ctx:** `(class discord.ext.commands.Context)`,
+            **cancion:** `(str)` | `*Optional*`
+        
+        ----------------------------
+
+        **Returns:**
+            `Mensaje en el chat donde se uso el comando en discord`
+
+        [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+        [Mas info sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
+    """
     idGuild = int(ctx.guild.id)
-    print(f"Log Previus, indice de cancion a devolverse: {int(cancion)}, Indice actual de la cola: {queueIndex[idGuild]}")
+    print(f"Log Previus, indice de cancion a devolverse: {int(cancion)}, Indice actual de la cola: {queueIndex[idGuild]}\nbot: {elBulloso.user.global_name} | {ctx.author} | {ctx.bot}")
 
     if ctx.interaction:
         ctx.interaction.response.defer(thinking=True)
@@ -1090,8 +1617,8 @@ async def previus(ctx: commands.Context, cancion: str = None):
 
             await ctx.send(
                 embed=MensajeBasico(
-                    "Suaga ahi sog :face_with_diagonal_mouth:",
-                    f"{ctx.author} Necesita estar en un canal de voz para usar ester comando!",
+                    "**Suaga ahi sog :face_with_diagonal_mouth: **",
+                    f"{ctx.author} Necesita estar en un canal de voz para usar este comando!",
                     DARK_RED
                 ),
                 silent=True
@@ -1101,7 +1628,7 @@ async def previus(ctx: commands.Context, cancion: str = None):
         if not queue[idGuild]:
             await ctx.send(
                 embed=MensajeBasico(
-                    "Cola Vacia :open_mouth:",
+                    "** Cola Vacia :open_mouth: **",
                     "No hay canciones a las que volver",
                     DARK_RED
                 ),
@@ -1113,7 +1640,7 @@ async def previus(ctx: commands.Context, cancion: str = None):
             index = int(cancion)
             if index >= queueIndex[idGuild]:
                 await ctx.send(
-                    "Trateme mas que serio",
+                    "** Trateme mas que serio **",
                     "Esa cancion esta sonando o aun no ha sonado",
                     silent=True
                 )
@@ -1124,7 +1651,7 @@ async def previus(ctx: commands.Context, cancion: str = None):
 
                 await ctx.send(
                     embed=MensajeBasico(
-                        "No hay cancion anterior :open_mouth: ",
+                        "** No hay cancion anterior :open_mouth: **",
                         "No hay cancion anterior en la cola de reproducion\nVolviendo a reproducir la cancion actual",
                         DARK_RED
                     ),
@@ -1139,7 +1666,7 @@ async def previus(ctx: commands.Context, cancion: str = None):
                 # Reduciendo el indice si se hizo previus sin numero, y hay al menos una cancion anterior  
                 queueIndex[idGuild] -= 1
         if ctx.interaction:
-            ctx.interaction.followup.send(f"Se devolvio a la cancion numero {queueIndex[idGuild]}")
+            await ctx.interaction.followup.send(f"Se devolvio a la cancion numero {queueIndex[idGuild]}")
         
         isInVc[idGuild].pause()
         await reproducir(ctx)
@@ -1150,6 +1677,32 @@ async def previus(ctx: commands.Context, cancion: str = None):
 
 @previus.autocomplete("cancion")
 async def previus_autocomplete(interaction: discord.Interaction, current: str):
+    """
+        - Se encarga de revisar si hay canciones en la cola de reproduccion,\n
+         Evalua tambien que no este en la primera cancion de la cola de reproduccion.
+
+        - Devuelve a la interacion de discord las 25 canciones anteriores en la cola,\n
+         Y si no hay ninguna cancion anterior devuelve un arreglo vacio a la interacion.
+
+        - Al comando previus le devuelve el indice de la cancion a devolverse\n
+         si se escoje una opcion de la interacion o se pasa un arg cancion: Numero de indice.
+        
+        - Current hace referencia al input del usuario durante la interaccion\n
+         En este caso el numero especifico de cancion a devolver.
+
+        ----------------------------
+
+        **Parameters:**
+            **interaction:** `(class discord.Interaction)`,
+            **current:** `(str)`
+        
+        ----------------------------
+
+        **Returns:**
+            `(str(int))`
+
+        [Mas infor sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
+    """
     idGuild = interaction.guild.id
 
     if not queue[idGuild] or queueIndex[idGuild] == 0:
@@ -1197,7 +1750,7 @@ async def siguienteCancion(ctx: commands.Context):
         isPlaying[idGuild] = False
         await ctx.send(
             embed=MensajeBasico(
-                "Se termino la cola de reproduccion! :frowning2:",
+                "**Se termino la cola de reproduccion! :frowning2: **",
                 "Limpiando la cola de reproduccion",
                 DARK_GREEN
             ),
@@ -1208,21 +1761,24 @@ async def siguienteCancion(ctx: commands.Context):
 #Funcion para reproducir la musica
 async def reproducir(ctx: commands.Context):
     """
-        Esta funcion se encarga de Verificar la cola de reproduccion
-        conectar el bot al canal de voz del usuario que uso el comando
-        Revisar si la cancion guardada en la cola tiene la streamUrl
-        Buscar la streamUrl si no esta,
+        - Esta funcion se encarga de Verificar la cola de reproduccion\n
+         conectar el bot al canal de voz del usuario que uso el comando\n
+         Revisar si la cancion guardada en la cola tiene la streamUrl\n
+         Buscar la streamUrl si no esta,
 
-        Mandar un contexto de la cancion que va a reproducir
+        - Mandar un contexto de la cancion que va a reproducir
 
-        reproducir la cancion usando FFmpeg
+        - reproducir la cancion usando FFmpeg
 
-        al terminar de reproducir ir a la funcion siguienteCancion
+        - al terminar de reproducir ir a la funcion siguienteCancion
 
         ----------------------------
 
-        **Args:**
-            **ctx:** `(class commands.Context)`
+        **Parameters:**
+            **ctx:** `(class discord.ext.commands.Context)`
+        
+        [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+        [Mas infor sobre FFmpegPCMAudio](https://discordpy.readthedocs.io/en/stable/api.html#ffmpegpcmaudio)
     """
     idGuild = int(ctx.guild.id)
     # print(f'entro a reproducir queIndex: {queueIndex[idGuild]} queue: {len(queue[idGuild])}, channel: {queue[idGuild][queueIndex[idGuild]][1]}')
@@ -1256,7 +1812,7 @@ async def reproducir(ctx: commands.Context):
         #isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
         #print("Antes de siguente cancion")
     else:
-        await ctx.send(embed=MensajeBasico("Cola Vacia! :melting_face: ","No hay mas canciones en la cola de reproduccion",DARK_PURPLE), silent=True)
+        await ctx.send(embed=MensajeBasico("**Cola Vacia! :melting_face: **","No hay mas canciones en la cola de reproduccion",DARK_PURPLE), silent=True)
         queueIndex[idGuild] += 1
         isPlaying[idGuild] = False
 
@@ -1265,12 +1821,12 @@ async def reproducir(ctx: commands.Context):
 #@elBulloso.command()
 async def conectarse(ctx: commands.Context, channel: discord.VoiceChannel):
     """
-        Este comando se encarga de conectar o mover el bot a un canal de voz
+        - Este comando se encarga de conectar o mover el bot a un canal de voz
 
         ----------------------------
 
-        **Args:**
-            **ctx:** `(class commands.Context)`
+        **Parameters:**
+            **ctx:** `(class discord.ext.commands.Context)`
             **channel:** `(class discord.VoiceChannel)`
         
         ----------------------------
@@ -1283,14 +1839,14 @@ async def conectarse(ctx: commands.Context, channel: discord.VoiceChannel):
     if isInVc[idGuild] == None or not isInVc[idGuild].is_connected():
         isInVc[idGuild] = await channel.connect()
         em = discord.Embed(
-            title=f"Conectado a {ctx.author.voice.channel}",
+            title=f"**Conectado a {ctx.author.voice.channel}**",
             description=f"Peticion de union hecha por {ctx.author.mention}",
             colour=VERDE
         )
         em.set_footer(icon_url=elBulloso.user.display_avatar)
         await ctx.send(embed=em, silent=True)
         if isInVc[idGuild] == None:
-            await ctx.send(embed=MensajeBasico("A lo bien :middle_finger:","No me pude conectar al canal de voz\nDebe estar en un canal de Voz",ROJO))
+            await ctx.send(embed=MensajeBasico("**A lo bien :middle_finger: **","No me pude conectar al canal de voz\nDebe estar en un canal de Voz",ROJO))
             return
     else:
         await isInVc[idGuild].move_to(channel)
@@ -1323,7 +1879,9 @@ async def usuarios(ctx: commands.Context):
 )
 async def sebax(ctx: commands.Context):
     """
-        Este comando recibe el contexto del comando y devuelve en discord un mensaje mencionando a sebax
+        - Este comando recibe el contexto del comando y devuelve en discord un mensaje mencionando a sebax
+
+        [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
     """
     objetoUser = None
     for m in ctx.guild.members:
@@ -1348,22 +1906,24 @@ discord.app_commands.autocomplete()
 )
 async def unirse(ctx: commands.Context):
     """
-        ### Une el bot a un chat de voz en el que esta el usuario que uso el comando
+        - Une el bot a un chat de voz en el que esta el usuario que uso el comando
 
         ----------------------------
 
-        **Args:**
-            **ctx:** `(class commands.Context)`
+        **Parameters:**
+            **ctx:** `(class discord.ext.commands.Context)`
         
         **Returns:**
             `None`
             No retorna nada manda el contexto a Discord
+
+        [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
     """
     if ctx.author.voice:
         channel = ctx.author.voice.channel
         await conectarse(ctx, channel)
     else:
-        await ctx.send(embed=MensajeBasico("Sea serio pa! :clown: ",f'Tiene que estar en un canal de voz para unirme.',ROJO))
+        await ctx.send(embed=MensajeBasico("**Sea serio pa! :clown: **",f'Tiene que estar en un canal de voz para unirme.',ROJO))
 
 
 @elBulloso.hybrid_command(
@@ -1374,17 +1934,19 @@ async def unirse(ctx: commands.Context):
 )
 async def salir(ctx: commands.Context):
     """
-        ### Se encarga de limpiar la cola de reproduccion,
-        ### reiniciar los estados globales y desconectar el bot
+        - Se encarga de limpiar la cola de reproduccion,\n
+         reiniciar los estados globales y desconectar el bot
 
         ----------------------------
 
-        **Args:**
-            **ctx**: `(class commands.Context)`
+        **Parameters:**
+            **ctx**: `(class discord.ext.commands.Context)`
         
         **Returns**:
             `None`
             Manda el contexto a discord directamente
+
+        [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
     """
     idGuild = int(ctx.guild.id)
 
@@ -1404,7 +1966,7 @@ async def salir(ctx: commands.Context):
 
     if isInVc[idGuild] != None:
         em = discord.Embed(
-            title=f"Desconectado de {ctx.author.voice.channel}",
+            title=f"**Desconectado de {ctx.author.voice.channel}**",
             description=f"ElBulloso Se abrio por culpa de {ctx.author.mention}",
             colour=0xdf1141
         )
@@ -1471,15 +2033,15 @@ async def agregarPlaylistYT(ctx: commands.Context, url: str, channel: discord.Vo
 @app_commands.describe(search="Titulo o enlace de la cancion")
 async def play(ctx: commands.Context, *, search: str = None):
     """
-        ### Comando que se encarga de buscar y reproducir canciones
-        ### Usando un texto o url, si no se usan args verificara si hay canciones
-        ### en la cola y si esta reproduciendo una cancion el bot, Si hay cancion y no esta reproduciendo
-        ### audio, reproducira la primera cancion de la cola
+        - Comando que se encarga de buscar y reproducir canciones
+         Usando un texto o url, si no se usan args verificara si hay canciones
+         en la cola y si esta reproduciendo una cancion el bot, Si hay cancion y no esta reproduciendo
+         audio, reproducira la primera cancion de la cola
 
         ----------------------------
 
-        **Args:**
-            **ctx:** `(class commands.Context),`
+        **Parameters:**
+            **ctx:** `(class discord.ext.commands.Context),`
             **search** `Optional (str)`
         
         ----------------------------
@@ -1487,6 +2049,9 @@ async def play(ctx: commands.Context, *, search: str = None):
         **Returns:**
             `None`
             Devuelve directamente a discord
+
+        [Mas info HybridCommands](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#hybridcommand)
+        [Mas infor sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
     """
     # Si el contexto es de una Interaccion (slashCommand)
     # Esto le dice a Discord:
@@ -1513,7 +2078,7 @@ async def play(ctx: commands.Context, *, search: str = None):
         await conectarse(ctx, channel)
     except:
         em = discord.Embed(
-            title=f"No me pude conectar",
+            title=f"**No me pude conectar**",
             description=f"Para conectarme debe estar en un canal de voz",
             colour=0xdf1141
         )
@@ -1523,7 +2088,7 @@ async def play(ctx: commands.Context, *, search: str = None):
     
     if not search or search is None:
         if len(queue[idGuild]) == 0:
-            await ctx.send(embed=MensajeBasico("Cola Vacia! :face_with_monocle: ","No hay canciones en la cola\n\nIngrese un link o una cancion para buscarla", DARK_RED), silent=True)
+            await ctx.send(embed=MensajeBasico("**Cola Vacia! :face_with_monocle: **","No hay canciones en la cola\n\nIngrese un link o una cancion para buscarla", DARK_RED), silent=True)
             return
         elif not isPlaying[idGuild]:
             if queue[idGuild] == None or isInVc[idGuild] == None:
@@ -1535,7 +2100,7 @@ async def play(ctx: commands.Context, *, search: str = None):
                 if ctx.interaction:
                     await ctx.interaction.followup.send(
                         embed=MensajeBasico(
-                            "Reanundando / Reproduciendo cancion",
+                            "**Reanundando / Reproduciendo cancion**",
                             "Reproduciendo la cancion actual en la cola",
                             DARK_GREEN
                         ),
@@ -1545,7 +2110,7 @@ async def play(ctx: commands.Context, *, search: str = None):
                 else:
                     await ctx.send(
                         embed=MensajeBasico(
-                            "Reanundando / Reproduciendo cancion",
+                            "**Reanundando / Reproduciendo cancion**",
                             "Reproduciendo la cancion actual en la cola",
                             DARK_GREEN
                         ),
@@ -1579,7 +2144,7 @@ async def play(ctx: commands.Context, *, search: str = None):
                     track_data = cliente.track(search)
                     cancion = await buscar(nombreArtiCancionPlaylistTrack(track_data))
                 except Exception as e:
-                    await ctx.send(embed=MensajeBasico("❌ No se pudo obtener el track", "Fallo el buscar la track de Spotify", ROJO), silent=True)
+                    await ctx.send(embed=MensajeBasico("❌ **No se pudo obtener el track**", "Fallo el buscar la track de Spotify", ROJO), silent=True)
                     return
             case "youtube_video":
                 search = veriSearch[1]
@@ -1588,7 +2153,7 @@ async def play(ctx: commands.Context, *, search: str = None):
                     if not cancion:
                         raise ValueError("No se encontró la canción")
                 except Exception as e:
-                    await ctx.send(embed=MensajeBasico("❌ Error al buscar", "Fallo el buscar video por link de Youtube", ROJO), silent=True)
+                    await ctx.send(embed=MensajeBasico("❌ **Error al buscar**", "Fallo el buscar video por link de Youtube", ROJO), silent=True)
                     return
             case "url_generica":
                 search = veriSearch[1]
@@ -1599,9 +2164,9 @@ async def play(ctx: commands.Context, *, search: str = None):
                     if not cancion:
                         raise ValueError("No se encontró la canción")
                 except Exception as e:
-                    await ctx.send(embed=MensajeBasico("❌ Error al buscar", "Fallo el buscar video por titulo o nombre", ROJO), silent=True)
+                    await ctx.send(embed=MensajeBasico("❌ **Error al buscar**", "Fallo el buscar video por titulo o nombre", ROJO), silent=True)
             case _:
-                await ctx.send(embed=MensajeBasico("Uy cual es esa :rage: ",f"Que mierda buscate sapa {ctx.author.mention}", ROJO), silent=True)
+                await ctx.send(embed=MensajeBasico("**Uy cual es esa :rage: **",f"Que mierda buscate sapa {ctx.author.mention}", ROJO), silent=True)
                 return
                 
 
@@ -1634,7 +2199,7 @@ async def play(ctx: commands.Context, *, search: str = None):
         #     cancion = await asyncio.to_thread(buscar, search)
 
         if not cancion or not isinstance(cancion, dict) or 'Titulo' not in cancion:
-            await ctx.send(embed=MensajeBasico("Uy cual es esa :rage: ",f"Que mierda buscate sapa {ctx.author.mention}", ROJO), silent=True)
+            await ctx.send(embed=MensajeBasico("**Uy cual es esa :rage: **",f"Que mierda buscate sapa {ctx.author.mention}", ROJO), silent=True)
             return
         else:
             if veriSearch and veriSearch[0] in ["spotify_album", "spotify_playlist", "youtube_playlist"]:
@@ -1661,11 +2226,11 @@ async def play(ctx: commands.Context, *, search: str = None):
 
 def limpiar_cache():
     """
-        ### Se encarga de limpiar el cache global del autocomplete
-        ### en el comando play
+    - Se encarga de limpiar el cache global del autocomplete\n
+     en el comando play
 
-        Analiza la diferencia en segundos desde que se creo el cache para
-        una query en especifico y si execede el tiempo la elimina
+    - Analiza la diferencia en segundos desde que se creo el cache para\n
+     una query en especifico y si execede el tiempo la elimina
     """
     ahora = time.time()
     try:
@@ -1678,18 +2243,18 @@ def limpiar_cache():
 
 def search_youtube_lite_cached(query: str) -> dict:
     """
-        Se encarga de hacer una busqueda ligera en youtube
-        Con una query y cachear el resultado
+    - Se encarga de hacer una busqueda ligera en youtube\n
+     Con una query y cachear el resultado
 
-        ----------------------------
+    ----------------------------
 
-        **Args:**
-            **query:** `(str)`
-        
-        ----------------------------
+    **Parameters:**
+        **query:** `(str)`
+    
+    ----------------------------
 
-        **Returns:**
-            `(dict)`
+    **Returns:**
+        `(dict)`
     """
     now = time.time()
     print("Entro search_Lite_cached, query", query)
@@ -1745,6 +2310,28 @@ def search_youtube_lite_cached(query: str) -> dict:
 
 @play.autocomplete("search")
 async def youtube_autocomplete(interaction: discord.Interaction, current: str):
+        """
+        - Parsea un texto dentro de una interaccion de un slashCommand\n
+         Para definir si es texto o URL/Link,
+
+        - Luego busca los primeros 5 resultados si es un texto,\n
+         Si es un link de youtube o Spotify muestra su titulo,\n
+
+        - Por ultimo devuelve a la logica del comando un string parseado
+
+        ----------------------------
+
+        **Parameters:** 
+            **interaction:** `(class discord.Interaction)`, 
+            **current:** `(str)`
+            
+        ----------------------------
+
+        **Returns:**
+            `(str)`
+        
+        [Mas infor sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
+        """
         if not current or len(current) < 3:
             return []
         
@@ -1767,17 +2354,29 @@ async def youtube_autocomplete(interaction: discord.Interaction, current: str):
                     case _:
                         data = "No hay autocompletado con Spotify 😘"
             except Exception as e:
-                interaction.followup.send(
-                    embed=MensajeBasico(
-                        "Fallo el autcomplete",
-                        "Mala mia sog :melting_face: ",
-                        DARK_RED
+                data = f"Revisa el link o vuelvelo a copiar, No lo encontre 😓 " or None # Para que la ternaria en el return Devuelva el else en caso de que pase de aqui
+                print("‼️🆘 Fallo la busqueda por spotipy, Busqueda:\n ", veriUrl[1], "\nException: ", e, type(e))
+                return [
+                    discord.app_commands.Choice(
+                        name = data,
+                        value = "Reivsa el link"
                     )
-                )
+                ]
+                # interaction.followup.send(
+                #     embed=MensajeBasico(
+                #         "Fallo el autcomplete",
+                #         "Mala mia sog :melting_face: ",
+                #         DARK_RED
+                #     )
+                # )
+                
+            # Estructura de la Ternaria
+            # True if Condicion else False
+            # "Hola" if "$Saludo" else "Saludame"
             return [
                 discord.app_commands.Choice(
-                    name=data if data else "No hay autocompletado con Spotify 😘",
-                    value=current
+                    name = data if data else "No hay autocompletado con Spotify 😘",
+                    value = current
                 )
             ]
         # Si la busqueda es un texto o link de youtube entre aqui
@@ -1860,6 +2459,24 @@ async def spotify(ctx, args):
 
 @elBulloso.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """
+        - Registra un evento en los manejadores de errores\n
+        para los tree comand para la siguiente corrutina
+
+        ----------------------------
+
+        **Parameters:**
+            **interaction:** `(class discord.Interaction)`,
+            **error:** `(class discord.app_commands.AppCommandError)`
+        
+        ----------------------------
+
+        **Returns:**
+            `Mensaje en discord indicando que fallo el slash command`
+        
+        [Mas info sobre tree](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.Bot.tree)
+        [Mas infor sobre error](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.Command.error)
+    """
     print("Entro manejo de error SlashCommand")
     await interaction.response.send_message(
         f"❌ Error ejecutando el comando: `{error}`", ephemeral=True
@@ -1867,6 +2484,14 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 @elBulloso.event
 async def on_ready():
+    """
+    - Evento que se encarga de activarse al momento de que el bot\n
+    se conecte al weebhook de discord
+
+    `discord.on_ready`
+
+    [Mas info](https://discordpy.readthedocs.io/en/stable/api.html#discord.on_ready)
+    """
     # try:
     # #   print(token)
     #     cliente = spotipy.Spotify(auth=token)
@@ -1915,7 +2540,26 @@ async def on_ready():
 
 #Listener para que el bot se desconecte al momento que no hallan usuarios en el canal de voz actual del bot.
 @elBulloso.listen()
-async def on_voice_state_update(member, before, after):
+async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    """
+    - Evento que se activa cuando el estado del bot en un chat de voz cambia
+
+    ----------------------------
+
+    **Parameters:**
+        **member:** `(class discord.Member)`, | El usuario del que se debe escuchar si cambia su estado
+        **before:** `(class discord.VoiceState)`, | El estado antes del cambio
+        **after:** `(class discord.VoiceState)` | El estado despues del cambio
+
+    ----------------------------
+
+    - Desconecta el bot del canal de voz si se queda solo
+
+    - Reconecta el bot si la conexion con el webhook de discord se pierde y luego se reconecta,\n
+     Luego reproduce la cancion actual de la queue si hay.
+
+    [Mas info](https://discordpy.readthedocs.io/en/stable/api.html#voice)
+    """
     idGuild = int(member.guild.id)
     # Si el bot se queda solo en el canal de voz
     if member.id != elBulloso.user.id and before.channel != None and after.channel != before.channel:
@@ -1951,6 +2595,12 @@ async def on_voice_state_update(member, before, after):
 
 @elBulloso.event
 async def on_close():
+    """
+        Registra un evento al cliente (Bot)
+
+        [Mas info](https://discordpy.readthedocs.io/en/stable/api.html#discord.Client.event)
+    """
+    print("Closing Bot..")
     shutdown_executor()
 
 if __name__ == "__main__":

@@ -7,20 +7,20 @@ import discord
 
 def MensajeBasico(titulo: str, texto: str, color: int, icon_Url: str = None) -> discord.embeds.Embed:
     """
-    ## Devuelve un objecto discord.Embed
+    - Devuelve un objecto discord.Embed
 
     ---------------------
 
-    **Args:**
-        - **titulo:** `(str)`
-        - **texto:** `(str)`
-        - **color:** `(int)`
-        - **icont_Url:** `(str) | url de la foto de perfil del bot`
+    **Parameters:**
+        **titulo:** `(str)`
+        **texto:** `(str)`
+        **color:** `(int)`
+        **icon_Url:** `(str) | url de la foto de perfil del bot`
 
     ---------------------    
 
     **Returns**
-        - `discord.embeds.Embed`
+        `discord.embeds.Embed`
     """
     em = discord.Embed(
             title=titulo,
@@ -34,8 +34,8 @@ def MensajeBasico(titulo: str, texto: str, color: int, icon_Url: str = None) -> 
 
 def esUrl(texto: str) -> tuple[str, str]:
     """
-    ##Pide un texto y la clasifica si es una url o no
-    ## y devuelve una url formateada si es url
+    - Pide un texto y la clasifica si es una url o no\n
+     y devuelve una url formateada si es url
 
     ---------------------
 
@@ -50,13 +50,13 @@ def esUrl(texto: str) -> tuple[str, str]:
 
     ---------------------
 
-    **Args**
-        - **texto:** `str`
+    **Parameters**
+        **texto:** `str`
     
     ---------------------
     
     **Returns:**
-        - `tuple(type: str, url: str)`
+        `tuple(type: str, url: str)`
     """
     # *Returns:*
     #     - tuple(isUrl: bool, tuple(type: str, url: str) )
@@ -82,7 +82,9 @@ def esUrl(texto: str) -> tuple[str, str]:
             tipo = "spotify_playlist"
         # Spotify Track
         if "spotify.com/intl-es/track/" in texto or "spotify.com/track/" in texto:
-            texto = texto.split("?")[0].removeprefix('https://open.spotify.com/intl-es/track/')
+            # Si por algun motivo el link no contiene el "intl-es" pueda igual parsear la ID del link
+            prefix = "https://open.spotify.com/intl-es/track/" if "intl-es" in texto else "https://open.spotify.com/track/"
+            texto = texto.split("?")[0].removeprefix(prefix)
             tipo = "spotify_track"
         # Spotify Album
         if "spotify.com/album/" in texto or "spotify.com/intl-es/album/" in texto:
@@ -98,17 +100,17 @@ def esUrl(texto: str) -> tuple[str, str]:
 
 def format_audio_seconds(seconds: str | int) -> str:
     """
-    ## Convierte un string de segundos a formato `Minutos:Segundos`
+    - Convierte un string de segundos a formato `Minutos:Segundos`
 
     ---------------------
 
-    **Args:**
-        - **Segundos** `(int)`
+    **Parameters:**
+        **Segundos** `(int)`
     
     ---------------------
 
     **Returns:**
-        - `(str)`
+        `(str)`
     """
     if seconds is None:
         return "desconocido"
