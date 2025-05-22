@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import spotipy, dotenv, yt_dlp, asyncio, functools, datetime, concurrent.futures
 
-from utils import esUrl
+from Dev2025.modules.utils import esUrl
 
 # Para controlar los tiempos del cache
 import time

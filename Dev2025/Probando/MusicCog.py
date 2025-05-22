@@ -5,7 +5,7 @@ from yt_dlp import YoutubeDL
 import asyncio
 
 # Clases/Modulos 
-from utils import MensajeBasico, format_audio_seconds, esUrl
+from modules.utils import MensajeBasico, format_audio_seconds, esUrl
 
 ydl_options = {
     'format': 'bestaudio/best', # Selecciono el mejor formato de audio disponible

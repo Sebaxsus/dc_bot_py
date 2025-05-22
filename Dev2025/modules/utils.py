@@ -40,13 +40,13 @@ def esUrl(texto: str) -> tuple[str, str]:
     ---------------------
 
     **Clasifica los siguientes tipos de links:**
-        - `yotube_video - 0`
-        - `yotube_playlist - 1`
+        - `youtube_video - 0`
+        - `youtube_playlist - 1`
         - `spotify_track - 2`
         - `spotify_playlist - 3`
         - `spotify_album - 4`
         - `url_generica - 5`
-        - `texto - 6'
+        - `texto - 6`
 
     ---------------------
 

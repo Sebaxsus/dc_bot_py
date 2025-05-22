@@ -13,3 +13,4 @@ spotipy.txt
 cambios.txt
 *.pyc
 /Dev2025/_pycache_
+.vscode/

@@ -1,13 +1,13 @@
 import discord 
 from discord import app_commands
 from discord.ext import commands
-import discord.ext.commands
-import discord.gateway
-import spotipy, dotenv, yt_dlp, asyncio, functools, datetime, concurrent.futures
+
+import spotipy, yt_dlp, asyncio, functools, datetime, concurrent.futures
 
 import discord.ext
-from utils import esUrl
-from yt_wrapper import buscar_metadatos, buscar, obtener_stream, shutdown_executor
+from modules.utils import esUrl
+from modules.yt_wrapper import buscar_metadatos, buscar, obtener_stream, shutdown_executor
+from settings import DISCORD_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
 # Para controlar los tiempos del cache
 import time, datetime
@@ -21,18 +21,18 @@ thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
 # archivo_test.write(f"\nTest Ejecutado el: {datetime.datetime.now()}\n")
 
-env = dotenv.dotenv_values("bot_dc_py/src/.env")
+
 
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/authorize"
 
-#enviromentVariables = dotenv_values("bot_dc_py/src/.env")
-spClientId='99d13bd2585a46c8acc7b7c9028dbfbe'
-spClientSecret='dc04ddb0ad22464c94a65580f5fdd529'
-spApi = "https://api.spotify.com/v1/"
-spEndPoint = "/track/{track_id}"
-spURI = 'http://localhost:3000'
+# env = dotenv.dotenv_values(pathlib.Path(__file__).parent / ".env")
+spClientId=SPOTIFY_CLIENT_ID
+spClientSecret=SPOTIFY_CLIENT_SECRET
+# spApi = "https://api.spotify.com/v1/"
+# spEndPoint = "/track/{track_id}"
+# spURI = 'http://localhost:3000'
 spUricall = 'https://127.0.0.1:5000/callback/'
-tokenBot = 'MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc'
+tokenBot = DISCORD_TOKEN
 
 scope = """ugc-image-upload,user-read-playback-state,user-modify-playback-state,user-read-currently-playing,
 app-remote-control,streaming,playlist-read-private,playlist-modify-public,playlist-read-collaborative,user-read-email,user-read-private

@@ -1,7 +1,7 @@
 from concurrent.futures import ProcessPoolExecutor
 import yt_dlp
 from typing import TypedDict, Optional
-from utils import format_audio_seconds # Asegúrate que esté disponible en tu proyecto
+from modules.utils import format_audio_seconds # Asegúrate que esté disponible en tu proyecto
 
 # Crea un pool de procesos dedicado para funciones pesadas
 yt_dlp_executor = ProcessPoolExecutor(max_workers=2)
