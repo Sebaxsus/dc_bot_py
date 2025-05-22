@@ -212,6 +212,8 @@ run iniciar_bot.cmd
 7. **Al finalizar la cola o recibir `/salir`:**
    - Limpia recursos y desconecta del canal de voz.
 
+![Imagen del diagrama de Flujo](./Archivos/Diagrama%20de%20Flujo%20ElBulloso.webp)
+
 ---
 
 ## Eventos y Manejo de Errores
