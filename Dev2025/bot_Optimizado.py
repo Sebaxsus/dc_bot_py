@@ -746,7 +746,7 @@ def embed_Reproduciendo_Ahora(ctx: commands.Context, cancion: dict) -> discord.E
     )
     embed.add_field(name="- **Duracion:**", value=f"""```cs\n\t{Duracion}```""")
     embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: **{str(usuario)}**', icon_url=pfp)
+    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
     embed.set_author(name=f"{Canal}")
     return embed
 
@@ -789,7 +789,7 @@ def embed_Añadido_Queue(ctx: commands.Context, cancion: dict) -> discord.Embed:
     )
     embed.add_field(name="- **Duracion:**", value=f"""```cs\n\t{Duracion}```""")
     embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: **{str(usuario)}**', icon_url=pfp)
+    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
     embed.set_author(name=f"{Canal}")
     return embed
 
@@ -832,7 +832,7 @@ def embed_Eliminado_Queue(ctx: commands.Context, cancion: dict) -> discord.Embed
     )
     embed.add_field(name="- **Duracion:**", value=f"""```cs\n\t{Duracion}```""")
     embed.set_thumbnail(url=miniatura)
-    embed.set_footer(text=f'Cancion de: **{str(usuario)}**', icon_url=pfp)
+    embed.set_footer(text=f'Cancion de: {str(usuario)}', icon_url=pfp)
     embed.set_author(name=f"{Canal}")
     return embed
 
@@ -1813,7 +1813,8 @@ async def reproducir(ctx: commands.Context):
         #print("Antes de siguente cancion")
     else:
         await ctx.send(embed=MensajeBasico("**Cola Vacia! :melting_face: **","No hay mas canciones en la cola de reproduccion",DARK_PURPLE), silent=True)
-        queueIndex[idGuild] += 1
+        # Limpio la cola de reproducción y Reinicio el Estado del índice de la Cola a 0, Para que en caso de usar play sin args no intente reproducir nada
+        queueIndex[idGuild] = 0
         isPlaying[idGuild] = False
 
 #Comando para conectar / Mover el bot a un canal de voz Edit: No deberia ser un comando
@@ -2091,9 +2092,30 @@ async def play(ctx: commands.Context, *, search: str = None):
             await ctx.send(embed=MensajeBasico("**Cola Vacia! :face_with_monocle: **","No hay canciones en la cola\n\nIngrese un link o una cancion para buscarla", DARK_RED), silent=True)
             return
         elif not isPlaying[idGuild]:
-            if queue[idGuild] == None or isInVc[idGuild] == None:
-                print("Entro no hay queue o esta en vc es igual a none")
+            if queue[idGuild] == None:
+                print("Entro no esta Reproduciendo musica y no hay queue")
                 #isPlaying[idGuild] = False       Si se da;a algo activar esto
+                if ctx.interaction:
+                    await ctx.interaction.followup.send(
+                        embed=MensajeBasico(
+                            "**No hay canciones en Cola :rage:**",
+                            "No hay canciones en la cola\n\nIngrese un link o una cancion para buscarla",
+                            DARK_RED
+                        ),
+                        ephemeral=True, # Solo visible para el usuario
+                        silent=True
+                    )
+                else:
+                    await ctx.send(
+                        embed=MensajeBasico(
+                            "**No hay canciones en Cola :rage:**",
+                            "No hay canciones en la cola\n\nIngrese un link o una cancion para buscarla",
+                            DARK_RED
+                        ),
+                        silent=True
+                    )
+            elif isInVc[idGuild] == None and len(queue[idGuild]) > 0:
+                print("Entro a no esta Reproduciendo y no esta en un Chat de voz y hay almenos una cancion en Queue")
                 await reproducir(ctx)
             else:
                 print("Entro else not args play")
