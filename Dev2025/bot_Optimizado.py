@@ -102,6 +102,9 @@ queueIndex = {}
 #Diccionario con id de la Guild y el status de si esta conectado a un canal de voz o no
 isInVc = {}
 
+# Diccionario Global de Guild para manejar la id del mensaje Id para poder Limpiar sus reacciones y añadirlas
+musicMensssageController = {}
+
 # Diccionario Global para manejar las deconciones manuales (Por codigo) y diferenciarlas de las desconexiones por errores (WebSocket closed with 1006)
 desconectado_por_codigo = {}
 ctx_por_guild = {}
@@ -129,6 +132,70 @@ FFMPEG_OPTIONS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 
     'options': '-vn',
     }
+
+def is_elbulloso(message: discord.Message):
+    return message.author == elBulloso.user
+
+@elBulloso.hybrid_command(
+    name="purge",
+    description="Purga todos los mensaje de el bot en un canal de texto.",
+    aliases=["PURGE"],
+    help="Comando para Purga todos los mensaje de el bot en un canal de texto.",
+)
+async def purge(ctx: commands.Context):
+    """
+    Se encarga de purgar el canal de texto en donde
+    se origino el comando.
+
+    Se creo para limpiar los canales de bots y mantenerlos mas
+    limpios de tanto mensaje basura.
+
+    **IMPORTANTE**
+
+    Actualmente por razones de limpieza la purga
+    **NO** discrimina entre mensajes solo elimina
+    los primeros veinte.
+    """
+    # print(f"Channel data: \nNombre:{channel.name}\nCantidad de Mensajes: {channel}\nCantidad de usuario en el: {channel}\nid: {channel.id}\nEl ultimo mensaje es de el bulloso: {is_elbulloso(channel.last_message)}")
+    channel = ctx.channel
+    deleted = await ctx.channel.purge(limit=20, reason=f"Limpiando el Canal de Texto: ${channel.name}")
+    await channel.send(embed=MensajeBasico(
+        titulo=f"⚠️ Se purgo el canal {channel.name} :cold_face:",
+        texto=f"Se purgaron {len(deleted)} mensajes :shushing_face:",
+        color=DARK_RED,
+    ))
+
+async def addMusicMessageController(mensaje: discord.Message):
+    """
+    Se encarga de obtener un Objeto del tipo (class discord.Message),
+    Para añadirle las reacciones de control de reproductor de musica
+
+    ◀️, ⏯️, ▶️
+
+    ---------------------
+
+    **Parameters:***
+        **mensaje:** `(clas discord.Message)`
+
+    ---------------------
+
+    **Returns:**
+        **None**¨
+
+    """
+
+    # Todo 
+    # Verificar si hay canciones previas (Anteriores), En caso de que si mostrar el icono de atras  ◀️
+    # Verificar si hay canciones siguientes (Mas canciones), En caso de que si mostrar el icono de ▶️
+
+    print(f"Entro addMusicMessageController {mensaje.id}")
+
+    # Limpio cualquier reaccion posible dentro del mensaje
+    await mensaje.clear_reactions()
+
+    # Le agrego las tres reacciones
+    for emoji in ["◀️", "⏯️", "▶️"]:
+        await mensaje.add_reaction(emoji)
 
 def verificarTokenSpotify() -> None:
     """
@@ -173,6 +240,7 @@ def MensajeBasico(titulo: str, texto: str, color: int) -> discord.Embed:
     - Crea un mensaje embed basico para enviar al canal de discord
     
     ---------------------
+
     **Parameters:**
         **titulo:** `(str)`
         **texto:** `(str)`
@@ -836,7 +904,7 @@ def embed_Eliminado_Queue(ctx: commands.Context, cancion: dict) -> discord.Embed
     embed.set_author(name=f"{Canal}")
     return embed
 
-async def mensaje(ctx: commands.Context, cancion: dict):
+async def mensaje(ctx: commands.Context, cancion: dict) -> discord.Message:
     """
     - Manda un mensaje de tipo embed al chat de discord\n
      con los metadatos de una cancion.
@@ -850,7 +918,7 @@ async def mensaje(ctx: commands.Context, cancion: dict):
     ----------------------------
 
     **Returns:**
-        `Mensaje de tipo embed en discord`
+        `(object dicord.Message)`
     """
     #idGuild = int(ctx.guild.id)
     #corutina = ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion))
@@ -861,7 +929,7 @@ async def mensaje(ctx: commands.Context, cancion: dict):
         #print("Entro a mensaje embed")
         #print('entro a mensaje')
         #fut.result()
-        await ctx.send(embed=em, silent=True)
+        return await ctx.send(embed=em, silent=True)
     except:
         print("Error al mandar mensaje mediante la funcion mensaje")
         pass
@@ -1053,17 +1121,18 @@ async def cola(ctx: commands.Context):
         returnIndex = i - queueIndex[idGuild]
         cancion = queue[idGuild][i][0]
         titulo = f"[{returnIndex}]. ▶️ **Escuchando**" if returnIndex == 0 else (f"[{returnIndex}]. ⏭️ **Siguiente**" if returnIndex == 1 else f"[{returnIndex}]. 🎵 - **{truncar_titulo(cancion["Titulo"])}**")
-        mensaje = f" - *[{cancion['Titulo']}]({cancion['link']})*\n - *{cancion['Canal']}* | `{cancion['Duracion']}`" if returnIndex == 0 else (f" - *[{cancion['Titulo']}]({cancion['link']})*\n - *{cancion['Canal']}* | `{cancion['Duracion']}`\n===")
+        mensaje = f"- *[{cancion['Titulo']}]({cancion['link']})*\n- *{cancion['Canal']}* | `{cancion['Duracion']}`" if returnIndex == 0 else (f"- *[{cancion['Titulo']}]({cancion['link']})*\n- *{cancion['Canal']}* | `{cancion['Duracion']}`\n------------")
         colaEmbed.add_field(
             name=titulo,
             value=mensaje,
             inline=False
         )
 
-    colaEmbed.set_footer(text=f"`🎶 Total de canciones en cola: **{totalSongs}**`")
+    colaEmbed.set_footer(text=f"`🎶 Total de canciones en cola: {totalSongs}`")
     await ctx.send(
         embed=colaEmbed,
-        silent=True
+        silent=True,
+        delete_after=300,
     )
 
     # returnVaule = ""
@@ -1606,10 +1675,10 @@ async def previus(ctx: commands.Context, cancion: str = None):
         [Mas info sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
     """
     idGuild = int(ctx.guild.id)
-    print(f"Log Previus, indice de cancion a devolverse: {int(cancion)}, Indice actual de la cola: {queueIndex[idGuild]}\nbot: {elBulloso.user.global_name} | {ctx.author} | {ctx.bot}")
+    print(f"Log Previus, indice de cancion a devolverse: {cancion}, Indice actual de la cola: {queueIndex[idGuild]}\nbot: {elBulloso.user.global_name} | {ctx.author} | {ctx.bot}")
 
     if ctx.interaction:
-        ctx.interaction.response.defer(thinking=True)
+        await ctx.interaction.response.defer(thinking=True)
     #cancion = queue[idGuild][queueIndex[idGuild]][0]
 
     try:
@@ -1716,13 +1785,21 @@ async def previus_autocomplete(interaction: discord.Interaction, current: str):
         if current.lower() in item[0]['Titulo'].lower()
     ][-25:] # Que muestres los primeros 25 registros de atras hacia adelante
 
-async def siguienteCancion(ctx: commands.Context):
+async def siguienteCancion(ctx: commands.Context, mensajeAnterior: discord.Message):
     #print("\nEntro a siguiente cancion")
     idGuild = int(ctx.guild.id)
+
+    print("Entro a siguiente cancion")
+
+    # Limpio las reacciones del Mensaje Anterior.
+    await mensajeAnterior.clear_reactions()
+
     if not isPlaying[idGuild]:
+        print("Entro a no esta reproducciendo musica")
         return
     # Si la el indice de la cola actual + 1 es menor a la cantidad de canciones en la cola
     if queueIndex[idGuild] + 1 < len(queue[idGuild]):
+        print("Entro a si hay siguiente cancion")
         isPlaying[idGuild] = True
         queueIndex[idGuild] += 1
         #         queue[Guild][numero_Actual_de_la_Cola_de_Reproduccion[Guild]][cancion]
@@ -1734,15 +1811,24 @@ async def siguienteCancion(ctx: commands.Context):
             cancion = await asyncio.to_thread(getStream, cancion['link'])
             queue[idGuild][queueIndex[idGuild]][0] = cancion
 
-        await mensaje(ctx, cancion)
+        mensajeEnviado = await mensaje(ctx, cancion)
+
+        print("Paso el mensaje de reproduciendo ahora en siguiente cancion ", cancion.get('Titulo'), mensajeEnviado.content)
+
+        await addMusicMessageController(mensaje=mensajeEnviado)
+
+        # Guardo el Objeto discord.Message
+        musicMensssageController[idGuild] = mensajeEnviado
+
         #print("anted de await ctx.send en linea 267")
         #await ctx.send(embed= embed_Reproduciendo_Ahora(ctx, cancion))
         #print(f"Source: {cancion['Source']}")
         source = discord.FFmpegPCMAudio(cancion['streamUrl'], **FFMPEG_OPTIONS)
         source = discord.PCMVolumeTransformer(source, 0.5)
-        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.bot_loop))
+        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx, mensajeAnterior=mensajeEnviado), elBulloso.bot_loop))
         #isInVc[idGuild].source = discord.PCMVolumeTransformer(isInVc[idGuild].source, 0.5)
     else:
+        print("Entro a no hay mas canciones")
         # Se supone que ya no hay mas canciones en la cola entonces entra aqui
         # Por eso entonces limpio la cola
         queueIndex[idGuild] = 0
@@ -1782,6 +1868,12 @@ async def reproducir(ctx: commands.Context):
     """
     idGuild = int(ctx.guild.id)
     # print(f'entro a reproducir queIndex: {queueIndex[idGuild]} queue: {len(queue[idGuild])}, channel: {queue[idGuild][queueIndex[idGuild]][1]}')
+
+    # Maneja el raro caso en donde entre a reproducir pero ya esta reproduciendo audio
+    # y los diccionarios de estados no reflajan esto jajaj 😓
+    if isInVc[idGuild].is_playing():
+        return
+    
     if queueIndex[idGuild] < len(queue[idGuild]):
         isPlaying[idGuild] = True
         isPaused[idGuild] = False
@@ -1797,14 +1889,22 @@ async def reproducir(ctx: commands.Context):
             cancion = await asyncio.to_thread(getStream, cancion['link'])
             queue[idGuild][queueIndex[idGuild]][0] = cancion
 
-        await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion), silent=True)
+        # Guardando el Objeto discord.Message que referencia al mensaje de reproduciendo ahora.
+        mensajeEnviado = await ctx.send(embed=embed_Reproduciendo_Ahora(ctx, cancion), silent=True)
+
+        await addMusicMessageController(mensaje=mensajeEnviado)
+
+        # Guardo el Objeto discord.Message
+        musicMensssageController[idGuild] = mensajeEnviado
+
+
         source = discord.FFmpegPCMAudio(cancion['streamUrl'], **FFMPEG_OPTIONS)
 
         ## ******************************* Probando el PCMVolumeTransformer
         source = discord.PCMVolumeTransformer(source, 0.5)
         ## ****************************************************************************
 
-        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx), elBulloso.bot_loop))
+        isInVc[idGuild].play(source, after=lambda e: asyncio.run_coroutine_threadsafe(siguienteCancion(ctx, mensajeAnterior=mensajeEnviado), elBulloso.bot_loop))
         #print(f"Source: {cancion['Source']}")
         #isInVc[idGuild].play(discord.FFmpegPCMAudio(
         #    cancion['Source']), after=lambda e: siguienteCancion(ctx)
@@ -1816,6 +1916,7 @@ async def reproducir(ctx: commands.Context):
         # Limpio la cola de reproducción y Reinicio el Estado del índice de la Cola a 0, Para que en caso de usar play sin args no intente reproducir nada
         queueIndex[idGuild] = 0
         isPlaying[idGuild] = False
+        # Esto se cambio en 
 
 #Comando para conectar / Mover el bot a un canal de voz Edit: No deberia ser un comando
 #Funcion para conectar el bot al canal de voz del autor 
@@ -2614,6 +2715,94 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
                 else:
                     print("⚠️ No hay contexto almacenado para este servidor.")
 
+@elBulloso.listen()
+async def on_raw_reaction_add(payload):
+    """
+    Se encarga de escuchar los mensajes de los canales de texto y si se añade
+    una reaccion a un canal de texto se activa
+
+    Payload tiene los siguiente atribs:
+        **message_id** `(int)`
+
+        **user_id** `(int)`
+
+        **channel_id** `(int)`
+
+        **guild_id** `(int)`
+
+        **emoji:** 
+            animated `(bool)`,
+            name `("Emoji Unicode")`,
+            id `(IDK returns None)`
+
+        **event_type** `(str ["REACTION_ADD", "REACTION_REMOVE"])`
+
+        **member** `(class discor.Member)` 
+            id `(int)`,
+            name `(str)`,
+            global_name `(str)`,
+            bot `(bool)`,
+            guild `(class discord.Guild)` 
+                id `(int)`,
+                name `(str)`,
+                shard_id `(int)`,
+                chunked `(bool)`,
+                member_count `(int)`
+
+        **message_author_id** `(int)`
+
+        **burst** `(bool)`
+
+        **burst_colours** `(list)`
+
+        **type** `(class ReactionType.normal??)` type=<ReactionType.normal: 0>
+    """
+    # print(f"Paylaod Event raw reaction add\n Payload: {payload}\n\tMessage ID: {payload.message_id}\n\tuser ID: {payload.user_id}\n\tChannel ID: {payload.channel_id}\n\tEmjoi: {payload.emoji}\n\tEvent Type: {payload.event_type}\n\t")
+    # "◀️", "⏯️", "▶️"
+    try:
+        idGuild = payload.guild_id
+
+        # Si no hay contexto global o no esta en un Canal de voz no haga nada
+        if (not isInVc[idGuild] or not ctx_por_guild.get(idGuild)):
+            return
+
+        # Obteniendo los datos del mensaje en el cual se añadió una reacción.
+        message = await elBulloso.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        # print(f"{message.author} | Bot user: {elBulloso.user} | isBOt?: {payload.member.bot} | user_name: {payload.member.name} | user_id: {payload.user_id} | bot_id: {elBulloso.user.id}")
+        
+        # Si la reaccion biene de un bot o el bulloso no haga nada
+        if (payload.member.bot or payload.user_id == elBulloso.user.id):
+            return
+        
+        # Verificando si el autor de ese mensaje fue elBulloso.
+        if (message.author == elBulloso.user):
+            # Obteniendo el unicode del Emoji el cual se añadio a las reacciones de el mensaje.
+            emoji = payload.emoji
+            
+            # Obteniendo el contexto global almacenado por guild.
+            ctx = ctx_por_guild.get(idGuild)
+
+            # Limpiando la reaccion del usuario, Con su argumento member usando el usuario de la reaccion como member
+            await message.remove_reaction(emoji, payload.member)
+            # \n\t{str(emoji) == "▶️"}
+            print(f"🔔 Se activo el event listener **Se agrego una reaccion**\n\temoji: {emoji}")
+
+
+            match str(emoji):
+                case "◀️":
+                    await previus(ctx)
+                case "⏯️":
+                    await pause(ctx)
+                case "▶️":
+                    await skip(ctx)
+                case _:
+                    # Si no esta dentro de estos casos no haga nada.
+                    return
+    except Exception as e:
+        print("Fallo el listener on add reaction\n",e)
+        return
+    
+    # print(message)
 
 @elBulloso.event
 async def on_close():
