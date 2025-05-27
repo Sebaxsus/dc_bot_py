@@ -5,7 +5,7 @@ from discord.ext import commands
 import spotipy, yt_dlp, asyncio, functools, datetime, concurrent.futures
 
 import discord.ext
-from modules.utils import esUrl
+from modules.utils import esUrl, is_elbulloso
 from modules.yt_wrapper import buscar_metadatos, buscar, obtener_stream, shutdown_executor
 from settings import DISCORD_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
@@ -112,10 +112,12 @@ musicMensssageController = {}
 desconectado_por_codigo = {}
 # Diccionario Global para guardar el objeto discord.Context con el fin de manejar las reconexion despues de una desconexion por Socket
 ctx_por_guild = {}
+# Diccionario Global para guardar la configuracion del servidor en cuanto al volumen de sonido del bot, Utiliza como llave Guild id (int) | (float) Volume setting
+volumePreference = {}
 # Diccionario global para manejar los datos en cache del autocomple del slashCommand play
 autocomplete_cache = {}
 
-CACHE_TTL = 20  # tiempo en segundos para considerar válida una entrada
+CACHE_TTL = 40  # tiempo en segundos para considerar válida una entrada
 
 #Constant for ytdl_Youtube and FFMPEG
 #YTDL_OPTIONS = {'format': 'bestaudio', 'nonplaylist': 'True'}
@@ -143,21 +145,137 @@ FFMPEG_OPTIONS = {
     'options': '-vn -f s16le -ar 48000 -ac 2',
     }
 
-def is_elbulloso(message: discord.Message) -> bool:
+
+@elBulloso.hybrid_command(
+        name="volume",
+        description="Establece el volumen de reproduccion de audio del bot (100 - 0)",
+        aliases=["VOLUME","VOL","vol"],
+        help="Establece el volumen de reproduccion de audio del bot (100  - 0)"
+)
+@app_commands.describe(vol="Volumen porcentual al que quieres establecer el bot")
+async def volume(ctx: commands.Context, vol: float):
     """
-    Funcion para verificar si el autor de un mensaje es el bot
+    Se encarga de establecer el valor del Diccionario global
+    `volumePreference`
+
+    El 100% es 1.0 y el 0% es mas o menos 0.00
 
     ---------------------
 
     **Parameters:**
-        **message:** `(object discor.Message)`
+        **ctx:** `(object discord.commads.Context)`
+        **vol:** `(float)`
     
     ---------------------
 
     **Returns:**
-        `(bool)`
+        `Establece el valor de vol en el diccionario volumePreference`
+
     """
-    return message.author == elBulloso.user
+
+    idGuild = ctx.guild.id
+    vol = float(vol)
+
+    print("Entro a cambio de volumen: ", vol)
+
+    if ctx.interaction:
+        await ctx.interaction.response.defer(thinking=True)
+
+    if (vol > 100 or vol < 0):
+        await ctx.send(
+            mention_author=True,
+            content=":Rage:\nEl volumen debe estar entre 100 y 0\n!No Puede Ser Mayor a 100 o Negativo!",
+            silent=True,
+            delete_after=60  
+        )
+
+    if (isInVc[idGuild].is_playing()):
+
+        # print(f"Es el source actual una instancia de PCMVolume: {type(isInVc[idGuild].source)}")
+
+        if isinstance(isInVc[idGuild].source, discord.PCMVolumeTransformer):
+
+            bloques_llenos = int((vol / 100) * 10)
+            bloques_vacios = 10 - bloques_llenos
+            porcentaje = vol
+
+            # Conviertiendo el Volumen de Porcentual a Logaritmico.
+            if vol == 0:
+                vol = 0
+            else:
+                vol = 10 ** ((vol - 100) / 40)
+
+            # print(f"Volumen anterior: {isInVc[idGuild].source.volume}, Volumen Nuevo: {vol}")
+            # Lo de abajo es lo mismo que discord.PCMVolumeTransformer.source.volume = vol
+            isInVc[idGuild].source.volume = vol
+
+            
+
+            await ctx.send(embed=MensajeBasico(
+                    titulo="🎵 Volumen Ajustado",
+                    texto=f"🔊 [{"⬜" * bloques_llenos}{"🔳" * bloques_vacios}] {porcentaje} %",
+                    color=DARK_GREEN
+                ),
+                silent=True,
+                delete_after=45
+            )
+        else:
+            await ctx.send("No se pudo cambiar el volumen 😓", silent=True, delete_after=30)
+            print("El source actual no permite cambiar el volumen dinámicamente.")
+        
+    volumePreference[idGuild] = vol
+
+# Current hace referencia a lo que el usuario escribio en el Arg
+@volume.autocomplete("vol") 
+async def volume_autocomplete(interaction: discord.Interaction, current: str):
+    """
+    Convierte un valor porcentual en un volumen lineal de decibeles
+    usando la formula inversa del decibelio
+
+    ¿Por que el sonido no es Linea?
+
+    El oido humano no percibe el sonido linealmente, En vez de eso, responde logarítmicamente
+        - Si se duplica la energía (Ejemplo de 0.5 a 1.0 en .volume), no se escucha "el doble" de volumen
+        - Para que algo suene el doble de fuerte **Perceptivamente**, Se necesita multiplicar el sonido dB unas **4 veces**
+
+    volumen lineal ≈ 10 ^ (dB / 20)
+
+    Formula Inversa para estimar los dB desde un percepcion Humana (Estimado)
+
+        dB ≈ 20 * log10 (volumen_percibido / 100)
+
+        Ejemplo:
+            50% percepción ≈ 20 * log10(50/100) ≈ -6.02 dB
+            Por ende -6.02 dB ≈ 10 ^ (-6.02 / 20 ) ≈ 0.5
+            20 * log10(20/100) ≈  -14 dB ≈  10 ^ (-14/20) ≈ 0.2
+            20% percepción ≈ -14 dB → volume ≈ 0.2
+
+        Para sacar el 20% se usa
+            10 ^ (-80 / 20) ≈ 0.08
+
+    Percepción Humana	Valor Lineal (.volume)
+        100%      ->         (original)1.0
+        50%	      ->             0.25
+        40%	      ->             0.20
+        30%	      ->             0.13
+        20%	      ->             0.08
+
+    Ejemplo:
+    50% percepción ≈ -6 dB → volume ≈ 0.25
+
+    20% percepción ≈ -14 dB → volume ≈ 0.08
+    """
+    idGuild = interaction.guild.id
+    
+    # Escalado logarítmico
+    # 10 ^2 ( (porcentaje - 100) / 20)
+    if (float(current) < 100 or float(current) > 0):
+        return [
+            discord.app_commands.Choice(
+                name= f"{porcentaje} %",
+                value=f"{porcentaje}"
+            ) for porcentaje in range(0, 100, 10)
+        ]
 
 @elBulloso.hybrid_command(
     name="purge",
@@ -1918,7 +2036,7 @@ async def siguienteCancion(ctx: commands.Context, mensajeAnterior: discord.Messa
         # Checking if the audio source is Opus
         # print(f"Source is opus? {source.is_opus()} \n\tPre-Cambio VOl {type(source)}")
 
-        source = discord.PCMVolumeTransformer(source, volume=0.2)
+        source = discord.PCMVolumeTransformer(source, volume=volumePreference[idGuild])
 
         # Checking Volume Changes on the source
         # print(f"Usando source: {type(source)}")
@@ -2012,7 +2130,7 @@ async def reproducir(ctx: commands.Context):
         # print(f"Source is opus? {source.is_opus()} \n\tPre-Cambio VOl {type(source)}")
 
         ## ******************************* Probando el PCMVolumeTransformer
-        source = discord.PCMVolumeTransformer(source, volume=0.2)
+        source = discord.PCMVolumeTransformer(source, volume=volumePreference[idGuild])
         ## ****************************************************************************
         # Checking Volume Changes on the source
         # print(f"Usando source: {type(source)}")
@@ -2807,6 +2925,8 @@ async def on_ready():
         isPaused[idGuild] = False
         desconectado_por_codigo[idGuild] = False
         musicMensssageController[idGuild] = None
+        volumePreference[idGuild] = 0.2
+
     # print(elBulloso.user.mention)
     # try:
     #     comandos_Sincronizados = await elBulloso.tree.sync()

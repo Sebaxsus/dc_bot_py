@@ -76,6 +76,9 @@ def esUrl(texto: str) -> tuple[str, str]:
         if "youtube.com/watch" in texto:
             texto = texto.split("&")[0]
             tipo = "youtube_video"
+        if "youtu.be/" in texto:
+            texto = f"https://www.youtube.com/watch?v={texto.split("?")[0].removeprefix("https://youtu.be/")}"
+            tipo = "youtube_video"
         # Spotify Playlist
         if "spotify.com/playlist/" in texto:
             texto = texto.split("?")[0]
@@ -116,3 +119,22 @@ def format_audio_seconds(seconds: str | int) -> str:
         return "desconocido"
     mins, secs = divmod(int(seconds), 60)
     return f"{mins}:{secs:02}"
+
+def is_elbulloso(message: discord.Message, bot: discord.Client) -> bool:
+    """
+    Funcion para verificar si el autor de un mensaje es el bot.
+
+    El bot debe ser o un objeto `discord.commands.Bot` o `discord.Client`
+
+    ---------------------
+
+    **Parameters:**
+        **message:** `(object discord.Message)`,
+        **bot:** `(object discord.Client)`
+    
+    ---------------------
+
+    **Returns:**
+        `(bool)`
+    """
+    return message.author == bot.user
