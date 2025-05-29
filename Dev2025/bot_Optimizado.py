@@ -2,6 +2,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from math import log10
+
 import spotipy, yt_dlp, asyncio, functools, datetime, concurrent.futures
 
 import discord.ext
@@ -98,7 +100,7 @@ isPlaying = {}
 # Diccionario para almacenar el estado de Pausa en la reproducción (Manual) en un determinado Server con la llave Guild id (int) | - (bool)
 isPaused = {}
 
-# Diccionario para almacenar todas las canciones de un Server con la llave Guild id (int) | - (List[dict])
+# Diccionario para almacenar todas las canciones de un Server con la llave Guild id (int) | - (List[dict cancion, object discord.VoiceChannel])
 queue = {}
 # Diccionario para almacenar el indice de la cola de reproducción de un Server con la llave Guild id (int) | (int)
 queueIndex = {}
@@ -108,13 +110,13 @@ isInVc = {}
 # Diccionario Global de Guild para manejar un objeto discord.Message para poder Limpiar sus reacciones y añadirlas se accede con la llave Guild id (int) | (object discord.Message)
 musicMensssageController = {}
 
-# Diccionario Global para manejar las desconxiones manuales (Por codigo) y diferenciarlas de las desconexiones por errores (WebSocket closed with 1006)
+# Diccionario Global para manejar las desconxiones manuales (Por codigo) y diferenciarlas de las desconexiones por errores (WebSocket closed with 1006) llave Guild id (int) | (bool)
 desconectado_por_codigo = {}
-# Diccionario Global para guardar el objeto discord.Context con el fin de manejar las reconexion despues de una desconexion por Socket
+# Diccionario Global para guardar el objeto discord.Context con el fin de manejar las reconexion despues de una desconexion por Socket llave Guild id (int) | (object discord.commands.Context)
 ctx_por_guild = {}
 # Diccionario Global para guardar la configuracion del servidor en cuanto al volumen de sonido del bot, Utiliza como llave Guild id (int) | (float) Volume setting
 volumePreference = {}
-# Diccionario global para manejar los datos en cache del autocomple del slashCommand play
+# Diccionario global para manejar los datos en cache del autocomple del slashCommand play llave String de busqueda (str) | (list[float (Time created), dict (cancion_metadata)])
 autocomplete_cache = {}
 
 CACHE_TTL = 40  # tiempo en segundos para considerar válida una entrada
@@ -174,13 +176,17 @@ async def volume(ctx: commands.Context, vol: float):
     """
 
     idGuild = ctx.guild.id
+    # Como el valor vol puede venir del autocomplete puede ser un str entonces fuerzo a que lo convierta a float
     vol = float(vol)
 
-    print("Entro a cambio de volumen: ", vol)
-
-    if ctx.interaction:
+    # print("Entro a cambio de volumen: ", vol, "Is Expired?:", ctx.interaction.is_expired(), "Is Responded?: ", ctx.interaction.response.is_done())
+    # Si se llamo a Volume por una interaccion y No se ha respondido.
+    if ctx.interaction and not ctx.interaction.response.is_done():
+        # Responde la interaccion con un "Dejeme trabajar" entonces resulve la interaccion
+        # Las respuestas siguientes se haran con interaction.followup
         await ctx.interaction.response.defer(thinking=True)
 
+    # Si el porcentaje del volumen esta por encima de 100 o por debajo de 0
     if (vol > 100 or vol < 0):
         await ctx.send(
             mention_author=True,
@@ -188,42 +194,50 @@ async def volume(ctx: commands.Context, vol: float):
             silent=True,
             delete_after=60  
         )
+        return
+    
+    # Guardando el valor porcentual antes de convertirlo en logaritmico
+    porcentaje = vol
+    # Conviertiendo el Volumen de Porcentual a Logaritmico.
+    if vol < 1:
+        vol = 10 ** ((0 - 100) / 40)
+    else:
+        vol = 10 ** ((vol - 100) / 40)
 
-    if (isInVc[idGuild].is_playing()):
+    if isInVc[idGuild]:
+        # Si el bot esta reproduciendo sonido en un canal de voz
+        if (isInVc[idGuild].is_playing()):
 
-        # print(f"Es el source actual una instancia de PCMVolume: {type(isInVc[idGuild].source)}")
+            # print(f"Es el source actual una instancia de PCMVolume: {type(isInVc[idGuild].source)}")
+            # Si la fuente del sonido es una instancia de la clase discord.PCMVolumeTransforme
+            # Si no lo es no podre cambiar el volumen del sonido en tiempo real.
+            if isinstance(isInVc[idGuild].source, discord.PCMVolumeTransformer):
 
-        if isinstance(isInVc[idGuild].source, discord.PCMVolumeTransformer):
+                # print(f"Volumen anterior: {isInVc[idGuild].source.volume}, Volumen Nuevo: {vol}")
+                # Lo de abajo es lo mismo que discord.PCMVolumeTransformer.source.volume = vol
+                isInVc[idGuild].source.volume = vol
 
-            bloques_llenos = int((vol / 100) * 10)
-            bloques_vacios = 10 - bloques_llenos
-            porcentaje = vol
-
-            # Conviertiendo el Volumen de Porcentual a Logaritmico.
-            if vol == 0:
-                vol = 0
             else:
-                vol = 10 ** ((vol - 100) / 40)
+                await ctx.send("No se pudo cambiar el volumen 😓", silent=True, delete_after=30)
+                print("El source actual no permite cambiar el volumen dinámicamente.")
+    else:
+        print("El bot no esta dentro de un canal de voz")
+    
+    bloques_llenos = int((porcentaje / 100) * 10)
+    bloques_vacios = 10 - bloques_llenos
 
-            # print(f"Volumen anterior: {isInVc[idGuild].source.volume}, Volumen Nuevo: {vol}")
-            # Lo de abajo es lo mismo que discord.PCMVolumeTransformer.source.volume = vol
-            isInVc[idGuild].source.volume = vol
+    await ctx.send(embed=MensajeBasico(
+            titulo="🎵 **Volumen Ajustado**",
+            texto=f"🔊 [{"🟪" * bloques_llenos}{"⬛" * bloques_vacios}] {porcentaje} %",
+            color=DARK_GREEN
+        ),
+        silent=True,
+        delete_after=45
+    )
 
-            
-
-            await ctx.send(embed=MensajeBasico(
-                    titulo="🎵 Volumen Ajustado",
-                    texto=f"🔊 [{"⬜" * bloques_llenos}{"🔳" * bloques_vacios}] {porcentaje} %",
-                    color=DARK_GREEN
-                ),
-                silent=True,
-                delete_after=45
-            )
-        else:
-            await ctx.send("No se pudo cambiar el volumen 😓", silent=True, delete_after=30)
-            print("El source actual no permite cambiar el volumen dinámicamente.")
-        
     volumePreference[idGuild] = vol
+
+    print(f"🔊 Se establecio el volumen a {porcentaje} %, Valor Log: {vol}")
 
 # Current hace referencia a lo que el usuario escribio en el Arg
 @volume.autocomplete("vol") 
@@ -238,7 +252,7 @@ async def volume_autocomplete(interaction: discord.Interaction, current: str):
         - Si se duplica la energía (Ejemplo de 0.5 a 1.0 en .volume), no se escucha "el doble" de volumen
         - Para que algo suene el doble de fuerte **Perceptivamente**, Se necesita multiplicar el sonido dB unas **4 veces**
 
-    volumen lineal ≈ 10 ^ (dB / 20)
+    volumen lineal ≈ 10 ^ (dB / 40)
 
     Formula Inversa para estimar los dB desde un percepcion Humana (Estimado)
 
@@ -246,35 +260,89 @@ async def volume_autocomplete(interaction: discord.Interaction, current: str):
 
         Ejemplo:
             50% percepción ≈ 20 * log10(50/100) ≈ -6.02 dB
-            Por ende -6.02 dB ≈ 10 ^ (-6.02 / 20 ) ≈ 0.5
+            Por ende -6.02 dB ≈ 10 ^ (-6.02 / 40 ) ≈ 0.5
             20 * log10(20/100) ≈  -14 dB ≈  10 ^ (-14/20) ≈ 0.2
             20% percepción ≈ -14 dB → volume ≈ 0.2
 
         Para sacar el 20% se usa
-            10 ^ (-80 / 20) ≈ 0.08
+            10 ^ ((20 - 100) / 40) ≈ 0.01
 
     Percepción Humana	Valor Lineal (.volume)
         100%      ->         (original)1.0
-        50%	      ->             0.25
-        40%	      ->             0.20
-        30%	      ->             0.13
-        20%	      ->             0.08
+        50%	      ->             0.056
+        40%	      ->             0.031
+        30%	      ->             0.017
+        20%	      ->             0.01
 
     Ejemplo:
-    50% percepción ≈ -6 dB → volume ≈ 0.25
+    50% percepción ≈ -6 dB → volume ≈ 0.056
 
-    20% percepción ≈ -14 dB → volume ≈ 0.08
+    20% percepción ≈ -14 dB → volume ≈ 0.017
     """
-    idGuild = interaction.guild.id
-    
-    # Escalado logarítmico
-    # 10 ^2 ( (porcentaje - 100) / 20)
-    if (float(current) < 100 or float(current) > 0):
-        return [
+
+    try:
+        idGuild = interaction.guild.id
+
+        # Escalado logarítmico
+        # VolLog = 10 ^ ( (porcentaje - 100) / 40)
+        # porcentaje =   (10 ^ VolLog) * 40
+        volumenActual = volumePreference[idGuild]
+
+        porcentajeVolumenActual = 40 * log10(volumenActual) + 100
+
+        # Le agrego de primeras en la lista, Para que aparezca de primeras en Discord.
+        listaPorcentajes = [
             discord.app_commands.Choice(
-                name= f"{porcentaje} %",
-                value=f"{porcentaje}"
-            ) for porcentaje in range(0, 100, 10)
+                name=f"Volumen Actual: {porcentajeVolumenActual} %",
+                value=f"{porcentajeVolumenActual}"
+            )
+        ]
+
+        # Si la entrada es un tipo float, Significa que no se ha puesto nada
+        if type(current) == float:
+            # Como no hay todavia una entrada por el usuario utilizo 
+            # el porcentajeActual para los condicionales de abajo
+            current = porcentajeVolumenActual
+            # Agrego a la Lista objetos discord.Choice que va de 100 hasta 0 con saltos de 10
+            for valor in range(100, -1, -10):
+                listaPorcentajes.append(
+                    discord.app_commands.Choice(
+                        name=f"{valor} %",
+                        value=valor
+                    )
+                )
+        else:
+            # Como ya se que el usuario escribio algo
+            # Elimino los espacios y escojo solo la primera parte (Numeros se supone)
+            current = float(current.split()[0])
+            # Agrego a la Lista objectos discord.Choice que va desde el numero que puso el usuario hasta 0 con salto de 10
+            for valor in range(int(current), -1, -10):
+                listaPorcentajes.append(
+                    discord.app_commands.Choice(
+                        name=f"{valor} %",
+                        value=valor
+                    )
+                )
+        
+        # print(f"Verificando que es current: {current} | {type(current)}.\nporcentajeActual: {porcentajeVolumenActual} | valorActual: {volumenActual}")
+        # Verifico que el numero que uso el usuario este dentro el rango de 100 a 0
+        if (current < 100 or current > 0) or current:
+            
+            return listaPorcentajes
+        else:
+            listaPorcentajes.insert(0, discord.app_commands.Choice(
+                    name="‼️ Tiene que ser un valor entre 0 y 100",
+                    value=f"{porcentajeVolumenActual}"
+                )
+            )
+            return listaPorcentajes
+    except Exception as e:
+        print(f"Fallo el autocomplete de volume\n {e}")
+        return [
+            discord,app_commands.Choice(
+                name="⚠️ Estoy experimentando Errores 😓, Asegurate de usar numeros",
+                value=f"{porcentajeVolumenActual}"
+            )
         ]
 
 @elBulloso.hybrid_command(
@@ -332,7 +400,7 @@ async def addMusicMessageController(mensaje: discord.Message, idGuild: int):
     Se encarga de obtener un Objeto del tipo (class discord.Message),
     Para añadirle las reacciones de control de reproductor de musica
 
-    ◀️, ⏯️, ▶️
+    🔽, ◀️, ⏯️, ▶️, 🔼
 
     ---------------------
 
@@ -356,7 +424,7 @@ async def addMusicMessageController(mensaje: discord.Message, idGuild: int):
     # print(f"Entro addMusicMessageController Message ID: {mensaje.id}\n\tGuild id: {idGuild}")
 
     # Inicializo la variable que contiene la lista de emjois a agregar
-    emojis = ["⏯️"]
+    emojis = ["🔽","⏯️","🔼"]
 
     # Limpio cualquier reaccion posible dentro del mensaje
     await mensaje.clear_reactions()
@@ -364,7 +432,7 @@ async def addMusicMessageController(mensaje: discord.Message, idGuild: int):
     # Si el indice actual es mayor a 0 y la cola tiene al menos 2 canciones
     if (queueIndex[idGuild] > 0 and len(queue[idGuild]) > 1):
         # Inserto el emoji al principio para asegurar consistencia en el UX y UI
-        emojis.insert(0, "◀️")
+        emojis.insert(1, "◀️")
 
     # Si la cantidad de canciones en cola es mayor a 1 y el indice actual de la cola + 1 es menor a la cantidad de canciones en cola
     # El + 1 en el indice de cola de reproduccion se debe a que la cola de reproduccion utiliza indices empezando por 0 pero
@@ -373,7 +441,7 @@ async def addMusicMessageController(mensaje: discord.Message, idGuild: int):
     # Esencialmente de podira hacer un len() - 1 pero no cambia en nada creo.
     if (len(queue[idGuild]) > 1 and (queueIndex[idGuild] + 1) < len(queue[idGuild])):
         # Inserto el emoji al fondo para asegurar consistencia en la UI y UX
-        emojis.append("▶️")
+        emojis.insert(-1,"▶️")
 
     # Le agrego las reacciones al mensaje
     # print("Emojis Antes de agregar al mensaje", emojis)
@@ -1718,9 +1786,13 @@ async def skip(ctx: commands.Context, cancion: str = None):
         )
         return
     
-    # Skip a una cancion en especifico
+    # Skip a una cancion en especifico | Si cancion es distinto a None
     if cancion is not None:
+        # Obtengo el Indice proporcionado por el usuario
         index = int(cancion)
+        # Si el Indice proporcionado por el usuario es mayor o igual que la cantidad de canciones empezando en 0
+        # O
+        # El Indice proporcionado por el usuario es menor al indice actual de la Cola
         if index >= len(queue[idGuild]) or index <= queueIndex[idGuild]:
             await ctx.send(
                 embed=MensajeBasico(
@@ -1733,10 +1805,16 @@ async def skip(ctx: commands.Context, cancion: str = None):
             )
             return
         
+        # En caso de que sea un Indice valido
         queueIndex[idGuild] = index
     else:
         queueIndex[idGuild] += 1
 
+    await ctx.send(
+        embed=MensajeBasico(
+            titulo=""
+        )
+    )
     isInVc[idGuild].pause()
     await reproducir(ctx)
     
@@ -1876,9 +1954,8 @@ async def previus(ctx: commands.Context, cancion: str = None):
         [Mas info sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
     """
     idGuild = int(ctx.guild.id)
-    print(f"Log Previus, indice de cancion a devolverse: {cancion}, Indice actual de la cola: {queueIndex[idGuild]}\nbot: {elBulloso.user.global_name} | {ctx.author} | {ctx.bot}")
-
-    if ctx.interaction:
+    print(f"Log Previus, indice de cancion a devolverse: {cancion}, Indice actual de la cola: {queueIndex[idGuild]}\n bot: {elBulloso.user.global_name} | {ctx.author} | {ctx.bot}\nIs Expired?: {ctx.interaction.is_expired()} | Is Respondend?: {ctx.interaction.response.is_done()}")
+    if ctx.interaction and not ctx.interaction.response.is_done():
         await ctx.interaction.response.defer(thinking=True)
     #cancion = queue[idGuild][queueIndex[idGuild]][0]
 
@@ -1942,7 +2019,15 @@ async def previus(ctx: commands.Context, cancion: str = None):
 
         if ctx.interaction:
             try:
-                await ctx.interaction.followup.send(f"Se devolvio a la cancion numero {queueIndex[idGuild]}")
+                await ctx.send(
+                    embed=MensajeBasico(
+                        titulo=f"Devolviendose a {queue[idGuild][queueIndex][0]}!",
+                        texto=f"Se devolvio a la cancion numero {queueIndex[idGuild]}",
+                        color=DARK_GREEN
+                        ),
+                        silent=True,
+                        delete_after=30
+                    )
             except Exception as e:
                 print(f"Fallo el interaction Follow Up previus\nError: {e}")
         
@@ -1950,7 +2035,7 @@ async def previus(ctx: commands.Context, cancion: str = None):
         await reproducir(ctx)
         
     except Exception as e:
-        await ctx.interaction.followup.send(f"❌ Ocurrió un error", ephemeral=True)
+        await ctx.send(f"❌ Ocurrió un error", ephemeral=True)
         print(f"Fallo el previus: {e}")
 
 @previus.autocomplete("cancion")
@@ -2925,7 +3010,7 @@ async def on_ready():
         isPaused[idGuild] = False
         desconectado_por_codigo[idGuild] = False
         musicMensssageController[idGuild] = None
-        volumePreference[idGuild] = 0.2
+        volumePreference[idGuild] = 0.05623413251903491 # ≈ 50%
 
     # print(elBulloso.user.mention)
     # try:
@@ -3081,6 +3166,23 @@ async def on_raw_reaction_add(payload):
                         await resume(ctx)
                 case "▶️":
                     await skip(ctx)
+                case "🔽":
+                    volumen = 40 * log10(volumePreference[idGuild]) + 100
+
+                    if (volumen - 10 < 1):
+                        volumen = 0
+                    else:
+                        volumen = volumen - 10
+
+                    await volume(ctx, volumen)
+                case "🔼":
+                    volumen = 40 * log10(volumePreference[idGuild]) + 100
+
+                    if (volumen + 10 < 1):
+                        volumen = 0
+                    else:
+                        volumen = volumen + 10
+                    await volume(ctx, volumen)
                 case _:
                     # Si no esta dentro de estos casos elimino esa reacción del mensaje.
                     # Luego termino la ejecucion. 👍
