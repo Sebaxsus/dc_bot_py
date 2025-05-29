@@ -1759,7 +1759,7 @@ async def skip(ctx: commands.Context, cancion: str = None):
     #print(not arg, type(arg), arg == type(arg))
 
     idGuild = int(ctx.guild.id)
-    print(f"Logger del skip, numero de skips {cancion}, Numero de canciones en cola: {len(queue[idGuild])}, Indice actual de la cola: {queueIndex[idGuild]}")
+    # print(f"Logger del skip, numero de skips {cancion}, Numero de canciones en cola: {len(queue[idGuild])}, Indice actual de la cola: {queueIndex[idGuild]}")
     #cancion = queue[idGuild][queueIndex[idGuild]][0]
     if isInVc[idGuild] == None:
         await ctx.send(
@@ -1812,8 +1812,12 @@ async def skip(ctx: commands.Context, cancion: str = None):
 
     await ctx.send(
         embed=MensajeBasico(
-            titulo=""
-        )
+            titulo=f"Saltando a {queue[idGuild][queueIndex[idGuild]][0].get("Titulo")}!",
+            texto=f"Se salto a la cancion numero {queueIndex[idGuild]}",
+            color=TEAL
+        ),
+        silent=True,
+        delete_after=30
     )
     isInVc[idGuild].pause()
     await reproducir(ctx)
@@ -1954,7 +1958,7 @@ async def previus(ctx: commands.Context, cancion: str = None):
         [Mas info sobre autocomplete](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.HybridCommand.autocomplete)
     """
     idGuild = int(ctx.guild.id)
-    print(f"Log Previus, indice de cancion a devolverse: {cancion}, Indice actual de la cola: {queueIndex[idGuild]}\n bot: {elBulloso.user.global_name} | {ctx.author} | {ctx.bot}\nIs Expired?: {ctx.interaction.is_expired()} | Is Respondend?: {ctx.interaction.response.is_done()}")
+    # print(f"Log Previus, indice de cancion a devolverse: {cancion}, Indice actual de la cola: {queueIndex[idGuild]}\n bot: {elBulloso.user.global_name} | {ctx.author} | {ctx.bot}\nIs Expired?: {ctx.interaction.is_expired()} | Is Respondend?: {ctx.interaction.response.is_done()}")
     if ctx.interaction and not ctx.interaction.response.is_done():
         await ctx.interaction.response.defer(thinking=True)
     #cancion = queue[idGuild][queueIndex[idGuild]][0]
@@ -2021,9 +2025,9 @@ async def previus(ctx: commands.Context, cancion: str = None):
             try:
                 await ctx.send(
                     embed=MensajeBasico(
-                        titulo=f"Devolviendose a {queue[idGuild][queueIndex][0]}!",
+                        titulo=f"Devolviendose a {queue[idGuild][queueIndex[idGuild]][0].get("Titulo")}!",
                         texto=f"Se devolvio a la cancion numero {queueIndex[idGuild]}",
-                        color=DARK_GREEN
+                        color=TEAL
                         ),
                         silent=True,
                         delete_after=30
