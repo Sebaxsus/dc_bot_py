@@ -13,6 +13,8 @@ idna==3.10
 multidict==6.4.3
 numpy==2.2.5
 propcache==0.3.1
+psutil==7.0.0
+PyAudio==0.2.14
 pycparser==2.22
 pycurl==7.45.6
 pydub==0.25.1
@@ -23,4 +25,4 @@ requests==2.32.3
 spotipy==2.25.1
 urllib3==2.4.0
 yarl==1.20.0
-yt-dlp==2025.4.30
+yt-dlp==2025.6.9
