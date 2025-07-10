@@ -1551,6 +1551,9 @@ async def eliminar(ctx: commands.Context, cancion: str = None):
         desconectado_por_codigo[idGuild] = True
 
         await isInVc[idGuild].disconnect()
+        # Limpiando cualquier posible cache residiual de la
+        # Instancia de conexión
+        await isInVc[idGuild].cleanup()
 
         isInVc[idGuild] = None
         
@@ -2262,25 +2265,41 @@ async def conectarse(ctx: commands.Context, channel: discord.VoiceChannel):
     """
     idGuild = int(ctx.guild.id)
     if isInVc[idGuild] == None or not isInVc[idGuild].is_connected():
-        isInVc[idGuild] = await channel.connect()
-        em = discord.Embed(
-            title=f"**Conectado a {ctx.author.voice.channel}**",
-            description=f"Peticion de union hecha por {ctx.author.mention}",
-            colour=VERDE
-        )
-        em.set_footer(icon_url=elBulloso.user.display_avatar)
-        await ctx.send(embed=em, silent=True)
-        if isInVc[idGuild] == None:
-            await ctx.send(
-                    embed=MensajeBasico(
-                        "**A lo bien :middle_finger: **",
-                        "No me pude conectar al canal de voz\nDebe estar en un canal de Voz",
-                        ROJO
-                    ),
-                    silent=True,
-                    delete_after=120,
-                )
-            return
+        try:
+            # Estableciendo un tiempo en segundos a esperar que se complete el Handshake o Conexión
+            # Activando la flag para reconexión
+            isInVc[idGuild] = await channel.connect(timeout=2,reconnect=True)
+            em = discord.Embed(
+                title=f"**Conectado a {ctx.author.voice.channel}**",
+                description=f"Peticion de union hecha por {ctx.author.mention}",
+                colour=VERDE
+            )
+            em.set_footer(icon_url=elBulloso.user.display_avatar)
+            await ctx.send(embed=em, silent=True)
+            if isInVc[idGuild] == None:
+                await ctx.send(
+                        embed=MensajeBasico(
+                            "**A lo bien :middle_finger: **",
+                            "No me pude conectar al canal de voz\nDebe estar en un canal de Voz",
+                            ROJO
+                        ),
+                        silent=True,
+                        delete_after=120,
+                    )
+                return
+        except discord.ClientException:
+            # En caso de que falle el conectarse, Limpio cualquier posible cache de
+            # La Instancia/Objecto discord.VoiceClient usando el metodo `cleanup()`
+            # y `disconnect(force=True)`
+            if isInVc.get(idGuild):
+                try:
+                    await isInVc[idGuild].disconnect(force=True)
+                except Exception as e:
+                    print(f"[ERROR] Fallo la desconexion despues de una excepción en la conexion Error: {e}")
+
+                await isInVc[idGuild].cleanup()
+                isInVc[idGuild] = None
+            # discord.errors.ConnectionClosed: Shard ID None WebSocket closed with 4006
     else:
         await isInVc[idGuild].move_to(channel)
 
@@ -2407,7 +2426,15 @@ async def salir(ctx: commands.Context):
         desconectado_por_codigo[idGuild] = True
 
         await ctx.send(embed=em, silent=True, delete_after=60)
-        await isInVc[idGuild].disconnect()
+        # Desconectando y Limpiando cualquier posible Cache
+        # De la Instancia `discord.VoiceClient`
+        try:
+            await isInVc[idGuild].disconnect()
+        except Exception as e:
+            print(f"[Error] Fallo la desconexion del cliente, Error: {e}")
+
+        await isInVc[idGuild].cleanup()
+
         ctx_por_guild.pop(ctx.guild.id, None)
         isInVc[idGuild] = None
     else:
@@ -3056,8 +3083,13 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
             queue[idGuild] = []
             queueIndex[idGuild] = 0
             desconectado_por_codigo[idGuild] = True
-
-            await isInVc[idGuild].disconnect()
+            try:
+                await isInVc[idGuild].disconnect()
+            except Exception as e:
+                print(f"[ERROR] Fallo la desconexion del cliente, Error: {e}")
+            # Esto es para que se limpie el cache de la conexion asi tratando de evitar
+            # El error de Conexión 4006
+            await isInVc[idGuild].cleanup()
 
     # Probando un evento de disconect
     # para revisar si se perido la conexion con el socket
