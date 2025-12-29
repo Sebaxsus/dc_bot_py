@@ -9,6 +9,7 @@ import spotipy, yt_dlp, asyncio, functools, datetime, concurrent.futures
 import discord.ext
 from modules.utils import esUrl, is_elbulloso
 from modules.yt_wrapper import buscar_metadatos, buscar, obtener_stream, shutdown_executor
+from modules.network_monitor import esperar_internet, hay_internet, monitor_heartbeat
 from settings import DISCORD_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
 # Para controlar los tiempos del cache
@@ -3267,9 +3268,46 @@ async def on_close():
     print("Closing Bot..")
     shutdown_executor()
 
+async def safe_main():
+    await esperar_internet()
+
+    asyncio.create_task(monitor_heartbeat(elBulloso))
+
+    while True:
+        try:
+            await elBulloso.start(tokenBot)
+
+        except Exception as e:
+            print(f"Bot desconectado inesperadamente: {e}")
+            print("Verificando conexión a Internet antes de reintentar...")
+
+            try:
+                await elBulloso.close()
+            except Exception as e:
+                pass # si ya estaba cerrado
+
+            print("verificando conexion a internet...")
+            await esperar_internet()
+
+            print("Reintentando en 3 segundos...")
+            await asyncio.sleep(3)  # pausa breve antes del siguiente start
+            continue
+
+        finally:
+            # Garantiza que la instancia cierre siempre el socket correctamente
+            try:
+                await elBulloso.close()
+            except:
+                pass
+
+        break
+
 if __name__ == "__main__":
+    
     try:
-        elBulloso.run(tokenBot)
+        asyncio.run(safe_main())
     except KeyboardInterrupt:
-        shutdown_executor()
         print("⛔️ Cierre manual del bot (Ctrl+C). Recursos liberados.")
+    finally:
+        shutdown_executor()
+        print("Procesos del executor cerrados correctamente.")
