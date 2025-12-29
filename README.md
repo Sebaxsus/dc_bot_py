@@ -21,7 +21,8 @@ ElBulloso es un bot de música para Discord que permite reproducir canciones y p
 7. [Comandos Disponibles](#comandos-disponibles)
 8. [Flujo de Funcionamiento](#flujo-de-funcionamiento)
 9. [Eventos y Manejo de Errores](#eventos-y-manejo-de-errores)
-10. [Notas y Recursos](#notas-y-recursos)
+10. [Descripción de utilidades](#manejo-del-entorno-cmd-variables-y-supervisión-del-bot)
+11. [Notas y Recursos](#notas-y-recursos)
 
 ---
 
@@ -222,6 +223,140 @@ run iniciar_bot.cmd
 - **on_voice_state_update**: Desconecta el bot si se queda solo en el canal de voz o reconecta si fue desconectado inesperadamente.
 - **on_app_command_error**: Maneja errores de comandos slash y responde en Discord.
 - **on_close**: Libera recursos al cerrar el bot.
+
+## Manejo del Entorno CMD, Variables y Supervisión del Bot
+
+Este documento describe el uso de ciertos comandos de Windows CMD, el propósito de las construcciones `call`, `set`, `%%p`, `%var%`, y detalla la arquitectura implementada para la supervisión del bot, incluyendo el módulo `network_monitor`, así como la transición del antiguo mecanismo `client.run()` a un modelo controlado mediante `asyncio.run()` y `client.start()`.
+
+1. ### Comandos esenciales de Windows CMD utilizados en los scripts
+   1. #### `call` 
+   `call` permite ejecutar otro archivo `.bat` o `.cmd` **sin abandonar** el proceso actual.
+   Es indispensable cuando se activa un entorno virtual en Windows:
+   ```cmd
+      call ruta\al\entorno\Scripts\activate.bat
+   ```
+   Si se ejecuta un batch sin `call`, el script principal se detiene y el control **no vuelve** al archivo original.
+   1. #### `set`
+   `set` permite definir variables de entorno dentro del script CMD:
+   ```cmd
+      set PACKAGES=yt-dlp discord.py
+   ```
+   Estas variables son temporales y solo existen durante la ejecución del script.
+   1. #### `%var%`
+   Sintaxis de lectura de variables en CMD:
+   ```cmd
+      echo %PACKAGES%
+   ```
+   Siempre se evalúan de forma inmediata durante la lectura del script.
+   1. #### `%%p`
+   Los ciclos `for` de un `.cmd` utilizan **doble porcentaje** cuando se ejecutan dentro de un archivo `.cmd`:
+   ```cmd
+      for %%p in (%PACKAGES%) do (
+         pip install --upgrade %%p
+      )
+   ```
+   La diferencia es:
+      - En **consola interactiva** → `%p`
+      - En **archivos .cmd/.bat** → `%%p`
+   Esto se debe al mecanismo de escape de CMD.
+1. ### Módulo `network_monitor`
+   El proyecto incorpora un módulo asincrónico llamado `network_monitor.py` diseñado para:
+      1. Verificar conexión real a Internet sin bloquear el event loop.
+      1. Esperar la restauración de Internet mediante reintentos controlados.
+      1. Monitorear el heartbeat de Discord para detectar congelamientos del WebSocket.
+      1. Generar mensajes de log con niveles apropiados cuando la red falla o el bot queda en estado inconsistente.
+   #### Verificación de Internet
+   ```python
+      async def hay_internet(timeout=3.0) -> bool:
+      # Usa asyncio.to_thread para no bloquear el event loop.
+   ```
+   Se utiliza un intento de conexión TCP a 8.8.8.8:53, lo cual es un método fiable y universal para verificar conectividad.
+   #### Espera asíncrona hasta restaurar conexión
+   ```python
+      async def esperar_internet(retry_delay=10.0):
+       # Reintentos con logs de advertencia
+   ```
+   Esta función permite suspender el inicio o la reconexión del bot hasta que se detecte que Internet está disponible nuevamente.
+   #### Monitor de Heartbeat
+   ```python
+      async def monitor_heartbeat(client, timeout=60.0):
+      # Observa client.latency y fuerza reconexión si se congela
+   ```
+   Discord puede dejar de enviar frames sin cerrar el WebSocket.
+   En tales casos:
+      - El bot sigue “vivo”.
+      - El event loop sigue funcionando.
+      - Pero el socket queda muerto (estado zombie).
+   Este monitor detecta esa condición y obliga un reinicio del WebSocket mediante:
+   ```python
+      await client.close()
+   ```
+   #### Cambio arquitectónico: de `client.run()` a `client.start()` + `asyncio.run()`
+   Discord.py proporciona tradicionalmente:
+   ```python
+      client.run(TOKEN)
+   ```
+   Sin embargo, este método:
+      - Crea internamente un event loop.
+      - Lo controla totalmente.
+      - Cierra el loop al terminar.
+      - No permite implementar supervisión avanzada.
+      - No permite recovery robusto en caídas de red.
+      - No permite reiniciar la sesión WebSocket de forma programática.
+   En este proyecto se reemplaza por:
+   ```python
+      await client.start(TOKEN)
+   ```
+   Este método:
+      - No crea un new event loop.
+      - Permite controlar las reconexiones.
+      - Permite cerrar la sesión sin matar el proceso.
+      - Es compatible con supervisión externa (safe_main, watchdogs, heartbeat monitor).
+   #### Event Loop principal administrado mediante `asyncio.run()`
+   El event loop del proceso completo es gestionado explícitamente:
+   ```python
+      if __name__ == "__main__":
+         asyncio.run(safe_main())
+   ```
+   Ventajas:
+      - Permite correr tareas de fondo (monitores, watchdogs, supervisión).
+      - Permite implementar un bucle supervisor:
+      ```python
+         while True:
+            try:
+               await client.start(TOKEN)
+            except Exception:
+               # recuperación, verificación de red, espera y reintento
+      ```
+      - Permite cerrar recursos en un bloque finally.
+      - Permite manejar señales (ej. KeyboardInterrupt) sin colapsar el event loop.
+   #### Patrón final de arranque seguro (safe_main)
+   El arranque del bot sigue el patrón:
+   ```python
+      async def safe_main():
+
+         await esperar_internet()
+         
+         asyncio.create_task(monitor_heartbeat(bot))
+
+         while True:
+            try:
+                  await bot.start(TOKEN)
+            except Exception:
+                  await bot.close()
+                  await esperar_internet()
+                  await asyncio.sleep(3)
+                  continue
+            finally:
+                  await bot.close()
+   ```
+   Este patrón garantiza:
+      - Supervisión continua.
+      - Recuperación de caídas inesperadas.
+      - Reinicio automático ante fallos de red.
+      - Cierre limpio del WebSocket.
+      - No bloqueos del event loop.
+      - Integración con ProcessPoolExecutor mediante shutdown_executor().
 
 ---
 
