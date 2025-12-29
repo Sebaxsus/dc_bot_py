@@ -21,13 +21,13 @@ set PACKAGES=yt-dlp discord.py
 
 REM Actualizar cada paquete
 for %%p in (%PACKAGES%) do (
-	echo"Actualizando %%p...
+	echo Actualizando %%p...
 	pip install --upgrade %%p
 )
 
 echo Paquetes Actualizados, Actualizando el requirements.txt.
 pip freeze > requirements.txt
-echo .
+echo requirements.txt actualizado.
 
 
 echo Ejecutando bot_Optimizado.py
