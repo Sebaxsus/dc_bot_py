@@ -229,26 +229,26 @@ run iniciar_bot.cmd
 Este documento describe el uso de ciertos comandos de Windows CMD, el propósito de las construcciones `call`, `set`, `%%p`, `%var%`, y detalla la arquitectura implementada para la supervisión del bot, incluyendo el módulo `network_monitor`, así como la transición del antiguo mecanismo `client.run()` a un modelo controlado mediante `asyncio.run()` y `client.start()`.
 
 1. ### Comandos esenciales de Windows CMD utilizados en los scripts
-   1. #### `call` 
+   1. ### `call` 
    `call` permite ejecutar otro archivo `.bat` o `.cmd` **sin abandonar** el proceso actual.
    Es indispensable cuando se activa un entorno virtual en Windows:
    ```cmd
       call ruta\al\entorno\Scripts\activate.bat
    ```
    Si se ejecuta un batch sin `call`, el script principal se detiene y el control **no vuelve** al archivo original.
-   1. #### `set`
+   1. ### `set`
    `set` permite definir variables de entorno dentro del script CMD:
    ```cmd
       set PACKAGES=yt-dlp discord.py
    ```
    Estas variables son temporales y solo existen durante la ejecución del script.
-   1. #### `%var%`
+   1. ### `%var%`
    Sintaxis de lectura de variables en CMD:
    ```cmd
       echo %PACKAGES%
    ```
    Siempre se evalúan de forma inmediata durante la lectura del script.
-   1. #### `%%p`
+   1. ### `%%p`
    Los ciclos `for` de un `.cmd` utilizan **doble porcentaje** cuando se ejecutan dentro de un archivo `.cmd`:
    ```cmd
       for %%p in (%PACKAGES%) do (
@@ -265,19 +265,19 @@ Este documento describe el uso de ciertos comandos de Windows CMD, el propósito
       1. Esperar la restauración de Internet mediante reintentos controlados.
       1. Monitorear el heartbeat de Discord para detectar congelamientos del WebSocket.
       1. Generar mensajes de log con niveles apropiados cuando la red falla o el bot queda en estado inconsistente.
-   #### Verificación de Internet
+   ### Verificación de Internet
    ```python
       async def hay_internet(timeout=3.0) -> bool:
       # Usa asyncio.to_thread para no bloquear el event loop.
    ```
    Se utiliza un intento de conexión TCP a 8.8.8.8:53, lo cual es un método fiable y universal para verificar conectividad.
-   #### Espera asíncrona hasta restaurar conexión
+   ### Espera asíncrona hasta restaurar conexión
    ```python
       async def esperar_internet(retry_delay=10.0):
        # Reintentos con logs de advertencia
    ```
    Esta función permite suspender el inicio o la reconexión del bot hasta que se detecte que Internet está disponible nuevamente.
-   #### Monitor de Heartbeat
+   ### Monitor de Heartbeat
    ```python
       async def monitor_heartbeat(client, timeout=60.0):
       # Observa client.latency y fuerza reconexión si se congela
@@ -291,7 +291,7 @@ Este documento describe el uso de ciertos comandos de Windows CMD, el propósito
    ```python
       await client.close()
    ```
-   #### Cambio arquitectónico: de `client.run()` a `client.start()` + `asyncio.run()`
+   ### Cambio arquitectónico: de `client.run()` a `client.start()` + `asyncio.run()`
    Discord.py proporciona tradicionalmente:
    ```python
       client.run(TOKEN)
@@ -312,7 +312,7 @@ Este documento describe el uso de ciertos comandos de Windows CMD, el propósito
       - Permite controlar las reconexiones.
       - Permite cerrar la sesión sin matar el proceso.
       - Es compatible con supervisión externa (safe_main, watchdogs, heartbeat monitor).
-   #### Event Loop principal administrado mediante `asyncio.run()`
+   ### Event Loop principal administrado mediante `asyncio.run()`
    El event loop del proceso completo es gestionado explícitamente:
    ```python
       if __name__ == "__main__":
@@ -330,7 +330,7 @@ Este documento describe el uso de ciertos comandos de Windows CMD, el propósito
       ```
       - Permite cerrar recursos en un bloque finally.
       - Permite manejar señales (ej. KeyboardInterrupt) sin colapsar el event loop.
-   #### Patrón final de arranque seguro (safe_main)
+   ### Patrón final de arranque seguro (safe_main)
    El arranque del bot sigue el patrón:
    ```python
       async def safe_main():
