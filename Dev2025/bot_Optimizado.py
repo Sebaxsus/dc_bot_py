@@ -2248,8 +2248,8 @@ async def reproducir(ctx: commands.Context):
 
 #Comando para conectar / Mover el bot a un canal de voz Edit: No deberia ser un comando
 #Funcion para conectar el bot al canal de voz del autor 
-#@elBulloso.command()
-async def conectarse(ctx: commands.Context, channel: discord.VoiceChannel):
+@elBulloso.command()
+async def conectarse(ctx: commands.Context, channel: discord.channel.VocalGuildChannel):
     """
         - Este comando se encarga de conectar o mover el bot a un canal de voz
 
@@ -2314,6 +2314,9 @@ async def conectarse(ctx: commands.Context, channel: discord.VoiceChannel):
 
                 isInVc[idGuild] = None
             # discord.errors.ConnectionClosed: Shard ID None WebSocket closed with 4006
+        # Manejo de error general.
+        except Exception as e:
+            print("Entro a Excep en Conectarse: ", e)
     else:
         await isInVc[idGuild].move_to(channel)
 
@@ -2554,7 +2557,10 @@ async def play(ctx: commands.Context, *, search: str = None):
         #     return
         
         await conectarse(ctx, channel)
-    except:
+    except Exception as e:
+
+        print("Exepcion en play, ", e)
+
         em = discord.Embed(
             title=f"**No me pude conectar**",
             description=f"Para conectarme debe estar en un canal de voz",
@@ -3308,6 +3314,8 @@ if __name__ == "__main__":
         asyncio.run(safe_main())
     except KeyboardInterrupt:
         print("⛔️ Cierre manual del bot (Ctrl+C). Recursos liberados.")
+    except Exception as e:
+        print("Algo fallo ", e)
     finally:
         shutdown_executor()
         print("Procesos del executor cerrados correctamente.")
