@@ -1,6 +1,17 @@
-import spotipy
+import spotipy, dotenv, sys, pathlib, os
 
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/authorize"
+
+sys.path.append(str(pathlib.Path(__file__).parent.parent / "Dev2025/modules"))
+
+DOTENV_PATH = pathlib.Path(__file__).parent / '.env'
+
+dotenv.load_dotenv(DOTENV_PATH)
+
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
+SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
+REDIRECT_URI = os.getenv('REDIRECT_URI')
 
 #enviromentVariables = dotenv_values("bot_dc_py/src/.env")
 spClientId='99d13bd2585a46c8acc7b7c9028dbfbe'

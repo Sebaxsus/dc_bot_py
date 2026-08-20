@@ -1,11 +1,22 @@
 import discord
 from discord.ext import commands
+import os, sys, dotenv, pathlib
 
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.all()
+
+sys.path.append(str(pathlib.Path(__file__).parent.parent / "Dev2025/modules"))
+
+DOTENV_PATH = pathlib.Path(__file__).parent / '.env'
+
+dotenv.load_dotenv(DOTENV_PATH)
+
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+
+token_bot = DISCORD_TOKEN
 
 client = discord.Client(intents=intents)
 
@@ -29,7 +40,7 @@ async def on_message(message):
     if message.content.startswith('!canal'):
         await message.channel.send(f"es puto")
 
-client.run('MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc')
+client.run(token_bot)
 
 #Configuro el bot con 'commands.Bot()'  / command_prefix define con que caracter el bot va a responder
 
@@ -40,4 +51,4 @@ client.run('MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL
 #async def ping(ctx):
 #    await ctx.send('pong')
 
-#elBulloso.run('MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc')
+#elBulloso.run(token_bot)

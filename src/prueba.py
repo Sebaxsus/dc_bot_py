@@ -3,7 +3,6 @@ from discord.ext import commands
 import pyaudio, io, sys, pydub, pytube
 import numpy as np
 import wave
-import os
 
 import datetime
 
@@ -15,6 +14,15 @@ import os
 import asyncio
 from yt_dlp import YoutubeDL
 from youtubesearchpython import VideosSearch
+import pathlib, dotenv
+
+sys.path.append(str(pathlib.Path(__file__).parent.parent / "Dev2025/modules"))
+
+DOTENV_PATH = pathlib.Path(__file__).parent / '.env'
+
+dotenv.load_dotenv(DOTENV_PATH)
+
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 
 #El intents es indispensable, Se usa para que el bot y la libreria obtenga informacion de
 #La api de discord con permisos, Los permiosos son los intents
@@ -214,4 +222,4 @@ async def prueba(ctx, *args):
         #else:
             #await ctx.send(f"Agregado a la cola de reproduccion")
 
-elBulloso.run('MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc')
+elBulloso.run(DISCORD_TOKEN)

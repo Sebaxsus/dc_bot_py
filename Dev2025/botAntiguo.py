@@ -3,7 +3,6 @@ from discord.ext import commands
 import pyaudio, io, sys, pydub, pytube, spotipy, dotenv, time
 import numpy as np
 import wave
-import os
 
 import datetime
 
@@ -11,6 +10,7 @@ from urllib import parse, request
 import re
 import json
 import os
+import pathlib
 #from youtube_dl import YoutubeDL
 import asyncio, functools
 from yt_dlp import YoutubeDL
@@ -18,18 +18,26 @@ from yt_dlp import YoutubeDL
 
 #Variables para spotipy
 
-env = dotenv.dotenv_values("bot_dc_py/src/.env")
+sys.path.append(str(pathlib.Path(__file__).parent.parent / "Dev2025/modules"))
 
+DOTENV_PATH = pathlib.Path(__file__).parent / '.env'
+
+dotenv.load_dotenv(DOTENV_PATH)
+
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
+SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
+REDIRECT_URI = os.getenv('REDIRECT_URI')
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/authorize"
 
 #enviromentVariables = dotenv_values("bot_dc_py/src/.env")
-spClientId='99d13bd2585a46c8acc7b7c9028dbfbe'
-spClientSecret='dc04ddb0ad22464c94a65580f5fdd529'
+spClientId= SPOTIFY_CLIENT_ID
+spClientSecret= SPOTIFY_CLIENT_SECRET
 spApi = "https://api.spotify.com/v1/"
 spEndPoint = "/track/{track_id}"
-spURI = 'http://localhost:3000'
+spURI = REDIRECT_URI
 spUricall = 'http://google.com/callback/'
-tokenBot = 'MTExOTg0OTk5MTU2NjAwODM0MA.GqbZY1.E9htEvIOG-FKE2BD36nT2RBP6NT4H2YfYL8bXc'
+tokenBot = DISCORD_TOKEN
 
 scope = """ugc-image-upload,user-read-playback-state,user-modify-playback-state,user-read-currently-playing,
 app-remote-control,streaming,playlist-read-private,playlist-modify-public,playlist-read-collaborative,user-read-email,user-read-private
